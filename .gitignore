@@ -1,0 +1,22 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Env & local
+.env
+.env.*.local
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Build artifacts (none by default, placeholder)
+dist/
+build/
+coverage/
+tmp/
+*.tmp

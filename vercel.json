@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "functions": {
+    "api/index.js": { "runtime": "nodejs18.x" },
+    "api/[...all].js": { "runtime": "nodejs18.x" }
+  },
+  "rewrites": [
+    { "source": "/", "destination": "/api/index" },
+    { "source": "/login", "destination": "/api/login" },
+    { "source": "/login.html", "destination": "/api/login" }
+  ]
+}

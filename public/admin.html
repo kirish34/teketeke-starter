@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TekeTeke – Admin (Starter)</title>
+  <style>
+    :root{ --brand:#0ea5e9; --ink:#0b0b0c; --bg:#f6fbff; --panel:#fff; --muted:#6b7280; --ok:#065f46; --bad:#b91c1c; --border:#e5e7eb; }
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);font-family:system-ui,Arial,sans-serif;color:var(--ink)}
+    header{background:var(--brand);color:#fff;padding:16px 20px;font-weight:700}
+    main{max-width:1000px;margin:24px auto;padding:0 16px}
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;box-shadow:0 4px 16px rgba(2,132,199,.08)}
+    h2{margin:0 0 10px}
+    form{display:grid;gap:8px;margin-top:8px}
+    input,button{padding:10px 12px;border-radius:10px;border:1px solid var(--border)}
+    button{background:var(--brand);color:#fff;border:none;font-weight:600;cursor:pointer}
+    .secondary{background:#111827;color:#fff}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .muted{color:var(--muted)}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#e0f2fe;color:#075985;font-size:.85rem}
+    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
+    .copybtn{margin-left:8px;padding:6px 10px;border-radius:8px;background:#111827;color:#fff;border:none;cursor:pointer;font-size:.85rem}
+    .toast{position:fixed;right:16px;top:16px;background:#111827;color:#fff;padding:10px 14px;border-radius:12px;opacity:0;transition:opacity .2s, transform .2s;transform:translateY(-10px);z-index:1000}
+    .toast.show{opacity:1;transform:translateY(0)}
+  </style>
+</head>
+<body>
+  <header>TekeTeke – Admin (Starter)</header>
+  <main>
+    <div class="card" id="session_card">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <strong>Session</strong>
+        <button class="secondary" type="button" onclick="logout()">Logout</button>
+      </div>
+    </div>
+    
+
+    <div class="card">
+      <h2>Register Matatu</h2>
+      <form onsubmit="return createMatatu(event)">
+        <div class="row">
+          <input id="plate" placeholder="Number plate (e.g., KDA 123A)" required />
+          <input id="name" placeholder="Display name (optional)" />
+        </div>
+        <input id="sacco" placeholder="SACCO name (optional)" />
+        <button>Create / Update</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Assign Till & USSD</h2>
+      <form onsubmit="return assignTill(event)">
+        <div class="row">
+          <input id="matatu_id_till" placeholder="Matatu ID" required />
+          <input id="till" placeholder="Till number" required />
+        </div>
+        <button>Save Till</button>
+      </form>
+      <div style="height:8px"></div>
+      <form onsubmit="return assignUssd(event)">
+        <div class="row">
+          <input id="matatu_id_ussd" placeholder="Matatu ID" required />
+          <button>Allocate USSD Code</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Matatus & Success Counts</h2>
+      <button class="secondary" onclick="loadMatatus()">Refresh List</button>
+      <div style="height:8px"></div>
+      <table id="tbl">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Plate</th>
+            <th>Till</th>
+            <th>USSD</th>
+            <th>Dial</th>
+            <th>Success</th>
+            <th>Last Tx</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Simulator</h2>
+      <form onsubmit="return simTx(event)">
+        <div class="row">
+          <input id="sim_matatu" placeholder="Matatu ID" required />
+          <input id="sim_amount" placeholder="Amount (e.g., 50)" type="number" step="0.01" />
+        </div>
+        <button>Simulate Success</button>
+      </form>
+    </div>
+  </main>
+
+  <div id="toast" class="toast">Copied!</div>
+
+  <script>
+    // USSD root is fetched from backend config to avoid drift
+    let UI_USSD_ROOT = '123';
+    const $ = (id)=>document.getElementById(id);
+
+    
+
+    function showToast(msg){
+      const t = $('toast');
+      t.textContent = msg || 'Done';
+      t.classList.add('show');
+      clearTimeout(window.__toast);
+      window.__toast = setTimeout(()=> t.classList.remove('show'), 1200);
+    }
+
+    async function api(path, opts={}){
+      const headers = Object.assign({ 'content-type':'application/json' }, opts.headers||{});
+      const res = await fetch(path, Object.assign(opts, { headers }));
+      const body = await res.json().catch(()=>({}));
+      if (!res.ok) throw new Error(body.error || res.statusText);
+      return body;
+    }
+
+    async function ensureAuth(){
+      try {
+        const r = await fetch('/api/auth/me');
+        if (!r.ok) throw new Error('unauthorized');
+        return true;
+      } catch(_) {
+        window.location.href = '/login.html';
+        return false;
+      }
+    }
+
+    async function logout(){
+      try { await fetch('/api/auth/logout', { method: 'POST' }); } catch(_) {}
+      window.location.href = '/login.html';
+    }
+
+    async function createMatatu(e){
+      e.preventDefault();
+      const payload = { plate: $('plate').value, name: $('name').value, sacco_name: $('sacco').value };
+      const out = await api('/api/matatus', { method:'POST', body: JSON.stringify(payload) });
+      showToast('Matatu saved');
+      $('matatu_id_till').value = out.matatu.id;
+      $('matatu_id_ussd').value = out.matatu.id;
+      $('sim_matatu').value = out.matatu.id;
+      loadMatatus();
+      return false;
+    }
+
+    async function assignTill(e){
+      e.preventDefault();
+      const id = $('matatu_id_till').value.trim();
+      const till_number = $('till').value.trim();
+      if(!id||!till_number) return false;
+      await api(`/api/matatus/${id}/till`, { method:'POST', body: JSON.stringify({ till_number }) });
+      showToast('Till updated');
+      loadMatatus();
+      return false;
+    }
+
+    async function assignUssd(e){
+      e.preventDefault();
+      const id = $('matatu_id_ussd').value.trim();
+      const out = await api(`/api/matatus/${id}/ussd`, { method:'POST' });
+      showToast('USSD allocated');
+      loadMatatus();
+      return false;
+    }
+
+    function copyDialText(text){
+      if(!text) return;
+      navigator.clipboard.writeText(text).then(()=> showToast('Copied'));
+    }
+
+    async function loadMatatus(){
+      const out = await api('/api/matatus');
+      const tbody = document.querySelector('#tbl tbody');
+      tbody.innerHTML = '';
+
+      (out.items || []).forEach(x=>{
+        const tr = document.createElement('tr');
+
+        const tdId = document.createElement('td'); tdId.className='mono'; tdId.textContent = x.matatu_id || '';
+        const tdPlate = document.createElement('td'); tdPlate.className='mono'; tdPlate.textContent = x.plate || '';
+        const tdTill = document.createElement('td'); tdTill.className='mono'; tdTill.textContent = x.till_number || '';
+        const tdUssd = document.createElement('td'); tdUssd.className='mono'; tdUssd.textContent = x.ussd_code || '';
+
+        const tdDial = document.createElement('td'); tdDial.className='mono';
+        const dial = x.ussd_code ? (`*${UI_USSD_ROOT}*${x.ussd_code}#`) : '';
+        if (dial) {
+          const span = document.createElement('span'); span.textContent = dial;
+          const btn = document.createElement('button'); btn.className='copybtn'; btn.type='button'; btn.textContent='Copy';
+          btn.addEventListener('click', ()=> copyDialText(dial));
+          tdDial.appendChild(span);
+          tdDial.appendChild(btn);
+        }
+
+        const tdSucc = document.createElement('td'); tdSucc.innerHTML = `<span class="pill">${x.total_success || 0}</span>`;
+        const tdLast = document.createElement('td'); tdLast.className='mono'; tdLast.textContent = x.last_tx_at || '';
+
+        tr.appendChild(tdId);
+        tr.appendChild(tdPlate);
+        tr.appendChild(tdTill);
+        tr.appendChild(tdUssd);
+        tr.appendChild(tdDial);
+        tr.appendChild(tdSucc);
+        tr.appendChild(tdLast);
+
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function simTx(e){
+      e.preventDefault();
+      const matatu_id = $('sim_matatu').value.trim();
+      const amount = Number($('sim_amount').value || 50);
+      await api('/api/sim/tx', { method:'POST', body: JSON.stringify({ matatu_id, amount, success: true }) });
+      showToast('Simulated success');
+      loadMatatus();
+      return false;
+    }
+
+    async function fetchConfig(){
+      try {
+        const res = await fetch('/api/config');
+        const cfg = await res.json().catch(()=>({}));
+        if (cfg && cfg.ussd_root) UI_USSD_ROOT = String(cfg.ussd_root);
+      } catch(_){ /* ignore */ }
+    }
+
+    // autoload
+    (async function init(){
+      if(!(await ensureAuth())) return;
+      await fetchConfig();
+      loadMatatus();
+    })();
+  </script>
+</body>
+</html>

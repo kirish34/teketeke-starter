@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TekeTeke — Admin Login</title>
+  <style>
+    :root{ --brand:#0ea5e9; --ink:#0b0b0c; --bg:#f6fbff; --panel:#fff; --border:#e5e7eb; --muted:#6b7280; }
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);font-family:system-ui,Arial,sans-serif;color:var(--ink)}
+    .wrap{display:grid;place-items:center;min-height:100vh;padding:16px}
+    .card{width:100%;max-width:380px;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px 16px;box-shadow:0 4px 16px rgba(2,132,199,.08)}
+    h1{margin:0 0 14px}
+    form{display:grid;gap:10px}
+    label{font-size:.9rem;color:var(--muted)}
+    input,button{padding:10px 12px;border-radius:10px;border:1px solid var(--border)}
+    button{background:var(--brand);color:#fff;border:none;font-weight:600;cursor:pointer}
+    .err{color:#b91c1c;font-size:.9rem;min-height:20px}
+    .muted{color:var(--muted);font-size:.9rem}
+  </style>
+  <script>
+    async function me(){
+      try{
+        const r = await fetch('/api/auth/me');
+        if(r.ok) location.href = '/';
+      }catch(_){/* ignore */}
+    }
+    async function onLogin(e){
+      e.preventDefault();
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      const btn = document.getElementById('btn');
+      const err = document.getElementById('err');
+      err.textContent = '';
+      btn.disabled = true; btn.textContent = 'Signing in…';
+      try{
+        const res = await fetch('/api/auth/login', {
+          method:'POST', headers:{'content-type':'application/json'},
+          body: JSON.stringify({ username, password })
+        });
+        const body = await res.json().catch(()=>({}));
+        if(!res.ok) throw new Error(body.error || 'login_failed');
+        location.href = '/';
+      }catch(ex){
+        err.textContent = ex.message || 'Login failed';
+      }finally{
+        btn.disabled = false; btn.textContent = 'Sign In';
+      }
+      return false;
+    }
+    // redirect if already logged in
+    me();
+  </script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Admin Login</h1>
+      <form onsubmit="return onLogin(event)">
+        <div>
+          <label>Username</label>
+          <input id="username" placeholder="Admin username" required />
+        </div>
+        <div>
+          <label>Password</label>
+          <input id="password" type="password" placeholder="Password" required />
+        </div>
+        <div class="err" id="err"></div>
+        <button id="btn">Sign In</button>
+      </form>
+      <div style="height:8px"></div>
+      <div class="muted">Set <code>ADMIN_USER</code>, <code>ADMIN_PASSWORD</code> and <code>SESSION_SECRET</code> in your environment.</div>
+    </div>
+  </div>
+</body>
+</html>
+
