@@ -587,11 +587,20 @@ app.post(
       throw new Error('matatu_id, amount, status are required');
     const amt = Number(amount);
     if (!(amt > 0)) throw new Error('amount must be > 0');
+    const normalizedStatus = String(status).toLowerCase();
+    if (normalizedStatus !== 'success') {
+      console.warn('[callback] Ignoring non-success transaction', {
+        matatu_id,
+        status: normalizedStatus,
+        mpesa_receipt
+      });
+      return { saved: false, ignored: true };
+    }
     const rec = {
       matatu_id,
       amount: amt,
       msisdn: normalizeMsisdn(msisdn),
-      status: String(status).toLowerCase(),
+      status: 'success',
       mpesa_receipt: mpesa_receipt || null,
       gateway_ref: gateway_ref || null,
       raw: raw || null
@@ -606,7 +615,7 @@ app.post(
   '/api/sim/tx',
   requireAdmin,
   asApi(async (req) => {
-    const { matatu_id, amount = 50, msisdn = '254700000000', success = true } = req.body || {};
+    const { matatu_id, amount = 50, msisdn = '254700000000' } = req.body || {};
     if (!matatu_id) throw new Error('matatu_id is required');
     const amt = Number(amount);
     if (!(amt > 0)) throw new Error('amount must be > 0');
@@ -616,8 +625,8 @@ app.post(
         matatu_id,
         amount: amt,
         msisdn: normalizeMsisdn(msisdn),
-        status: success ? 'success' : 'failed',
-        mpesa_receipt: success ? 'TEST' + Math.floor(Math.random() * 1e6) : null,
+        status: 'success',
+        mpesa_receipt: 'TEST' + Math.floor(Math.random() * 1e6),
         gateway_ref: 'SIM-' + Date.now()
       })
       .select('*')

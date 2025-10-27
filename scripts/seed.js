@@ -93,12 +93,11 @@ async function seedTransactions(matatus, txPerMatatu) {
     console.log('No matatus available for transactions seeding.');
     return;
   }
-  const statuses = ['success', 'failed', 'pending'];
   const seedId = Date.now();
   let total = 0;
   for (const matatu of matatus) {
     for (let i = 0; i < txPerMatatu; i++) {
-      const status = statuses[Math.floor(Math.random() * statuses.length)];
+      const status = 'success';
       const amount = (Math.floor(Math.random() * 40) + 10) * 10;
       const msisdn = randomMsisdn();
       const createdAt = randomRecentDate(10);
