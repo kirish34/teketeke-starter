@@ -152,17 +152,6 @@ function renderList(items){
       tdDial.append(span, btn);
     }
 
-    const tdActions = document.createElement('td');
-    const actions = document.createElement('div'); actions.className='actions';
-    const btnTill = document.createElement('button'); btnTill.className='secondary'; btnTill.textContent='Change Till';
-    btnTill.addEventListener('click', ()=> changeTill(x));
-    const btnUssd = document.createElement('button'); btnUssd.className='secondary'; btnUssd.textContent='New USSD';
-    btnUssd.addEventListener('click', ()=> reassignUssd(x.matatu_id, x.plate));
-    const btnDelete = document.createElement('button'); btnDelete.className='danger'; btnDelete.textContent='Delete';
-    btnDelete.addEventListener('click', ()=> deleteMatatu(x.matatu_id, x.plate));
-    actions.append(btnTill, btnUssd, btnDelete);
-    tdActions.appendChild(actions);
-
     tr.append(
       cell(x.matatu_id, true),
       cell(x.plate, true),
@@ -170,8 +159,7 @@ function renderList(items){
       cell(x.ussd_code, true),
       tdDial,
       cell(x.total_success || 0),
-      cell(x.last_tx_at || '', true),
-      tdActions
+      cell(x.last_tx_at || '', true)
     );
     tbody.appendChild(tr);
   });

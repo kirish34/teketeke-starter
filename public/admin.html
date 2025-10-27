@@ -1,9 +1,9 @@
-ï»¿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>TekeTeke â€” Admin Console</title>
+  <title>TekeTeke — Admin Console</title>
   <style>
     :root{
       --brand:#0ea5e9; --ink:#0b0b0c; --bg:#f6fbff; --panel:#fff; --muted:#6b7280;
@@ -58,7 +58,7 @@
 
   <div class="content">
     <header>
-      <div><strong>Admin Console</strong> <span class="muted">â€¢ matatus only</span></div>
+      <div><strong>Admin Console</strong> <span class="muted">• matatus only</span></div>
       <button id="btn-logout" class="secondary" type="button">Logout</button>
     </header>
 
@@ -85,10 +85,10 @@
         <div class="card">
           <h2>Edit Existing Matatu</h2>
           <div class="toolbar">
-            <input id="edit_search" placeholder="Search by plateâ€¦">
+            <input id="edit_search" placeholder="Search by plate…">
             <button id="btn-edit-search" class="secondary" type="button">Search</button>
           </div>
-          <div id="edit_result" class="muted">Search to load a matatuâ€¦</div>
+          <div id="edit_result" class="muted">Search to load a matatu…</div>
         </div>
       </section>
 
@@ -97,13 +97,12 @@
           <div class="toolbar">
             <h2 style="margin:0">Matatu List</h2>
             <button id="btn-list-refresh" class="secondary" type="button">Refresh</button>
-            <input id="list_filter" placeholder="Filter by plateâ€¦">
+            <input id="list_filter" placeholder="Filter by plate…">
           </div>
           <table id="tbl">
             <thead>
               <tr>
-                <th>ID</th><th>Plate</th><th>Till</th><th>USSD</th><th>Dial</th><th>Success</th><th>Last Tx</th><th>Actions</th>
-              </tr>
+                <th>ID</th><th>Plate</th><th>Till</th><th>USSD</th><th>Dial</th><th>Success</th><th>Last Tx</th></tr>
             </thead>
             <tbody></tbody>
           </table>
@@ -118,7 +117,7 @@
             <button id="btn-tx-load" class="secondary" type="button">Load</button>
           </div>
           <div class="muted" id="tx_hint">
-            Backend endpoint for transactions is not implemented in the starter. Add <code>GET /api/transactions?matatu_id=&lt;uuid&gt;</code> and weâ€™ll render them here.
+            Backend endpoint for transactions is not implemented in the starter. Add <code>GET /api/transactions?matatu_id=&lt;uuid&gt;</code> and we’ll render them here.
           </div>
           <table id="tx_tbl" style="display:none">
             <thead>
@@ -147,3 +146,5 @@
   <script src="./js/admin.js" defer></script>
 </body>
 </html>
+
+
