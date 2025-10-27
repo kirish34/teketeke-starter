@@ -207,7 +207,13 @@
     }
 
     function initNav() {
-      document.querySelectorAll('.nav button[data-section]').forEach((btn) => {
+      document.querySelectorAll('.nav button').forEach((btn) => {
+        let section = btn.dataset.section;
+        if (!section && btn.id) {
+          section = btn.id.replace(/^nav-/, '');
+          if (section === 'trans') section = 'transactions';
+          btn.dataset.section = section;
+        }
         btn.type = 'button';
         btn.addEventListener('click', () => showSection(btn.dataset.section));
       });
