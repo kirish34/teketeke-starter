@@ -193,6 +193,17 @@
     }
 
     // toast
+    async function ensureAuth(){
+      try{
+        const res = await fetch('/api/auth/me');
+        if(!res.ok) throw new Error('unauthorized');
+        return true;
+      }catch(_){
+        window.location.href = '/login.html';
+        return false;
+      }
+    }
+
     function showToast(msg){
       const t = $('toast');
       t.textContent = msg || 'Done';
@@ -204,11 +215,22 @@
     // api helper
     async function api(path, opts={}){
       const headers = Object.assign({ 'content-type':'application/json' }, opts.headers||{});
-      const tok = getAdminToken(); if (tok) headers['x-admin-token'] = tok;
       const res = await fetch(path, Object.assign(opts, { headers }));
+      if(res.status === 401){
+        window.location.href = '/login.html';
+        throw new Error('unauthorized');
+      }
       const body = await res.json().catch(()=>({}));
       if (!res.ok) throw new Error(body.error || res.statusText);
       return body;
+    }
+
+    async function fetchConfig(){
+      try{
+        const res = await fetch('/api/config');
+        const cfg = await res.json().catch(()=>({}));
+        if(cfg && cfg.ussd_root) UI_USSD_ROOT = String(cfg.ussd_root);
+      }catch(_){}
     }
 
     // REGISTER
@@ -361,9 +383,12 @@
     }
 
     // init
-    (function init(){
+    (async function init(){
       $('admin_token').value = getAdminToken();
-      loadMatatus();
+      const ok = await ensureAuth();
+      if(!ok) return;
+      await fetchConfig();
+      await loadMatatus();
     })();
   </script>
 </body>
