@@ -123,10 +123,17 @@
         <div class="card">
           <h2>Transactions</h2>
           <div class="toolbar">
+            <select id="tx_matatu">
+              <option value="">All matatus</option>
+            </select>
             <input id="tx_plate" placeholder="Search by plate (optional)" />
+            <input id="tx_from" type="date" />
+            <input id="tx_to" type="date" />
             <button id="btn-tx-load" class="secondary" type="button">Load</button>
+            <button id="btn-tx-reset" class="secondary" type="button">Reset</button>
           </div>
-          <div class="muted" id="tx_hint">Enter a plate (optional) and select Load to view recent transactions.</div>
+          <div class="muted" id="tx_summary" style="display:none"></div>
+          <div class="muted" id="tx_hint">Enter filters above and select Load to view recent transactions.</div>
           <table id="tx_tbl" style="display:none">
             <thead>
               <tr>

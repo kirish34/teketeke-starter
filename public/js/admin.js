@@ -132,9 +132,11 @@ async function createMatatu(e){
 
 let _matatus = [];
 let _transactions = [];
+let _lastTxSummary = null;
 async function loadMatatus(){
   const out = await api('/api/matatus');
   _matatus = out.items || [];
+  refreshMatatuOptions();
   renderList(_matatus);
 }
 
@@ -149,6 +151,14 @@ function renderList(items){
   tbody.innerHTML = '';
   items.forEach(x=>{
     const tr = document.createElement('tr');
+    tr.dataset.matatuId = x.matatu_id || '';
+    tr.dataset.plate = x.plate || '';
+    tr.style.cursor = 'pointer';
+    tr.title = 'View transactions';
+    tr.addEventListener('click', (ev) => {
+      if (ev.target.closest('button')) return;
+      focusTransactions(x);
+    });
 
     const tdDial = document.createElement('td'); tdDial.className='mono';
     const dial = x.ussd_code ? (`*${UI_USSD_ROOT}*${x.ussd_code}#`) : '';
@@ -170,6 +180,48 @@ function renderList(items){
     );
     tbody.appendChild(tr);
   });
+}
+
+function refreshMatatuOptions(){
+  const select = $('tx_matatu');
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = '';
+  const baseOpt = document.createElement('option');
+  baseOpt.value = '';
+  baseOpt.textContent = 'All matatus';
+  select.appendChild(baseOpt);
+  _matatus.forEach((m) => {
+    const opt = document.createElement('option');
+    opt.value = m.matatu_id || '';
+    const parts = [];
+    if (m.plate) parts.push(m.plate);
+    if (m.till_number) parts.push(`Till ${m.till_number}`);
+    opt.textContent = parts.length ? parts.join(' • ') : (m.matatu_id || 'Unknown matatu');
+    select.appendChild(opt);
+  });
+  if (current && Array.from(select.options).some((opt) => opt.value === current)) {
+    select.value = current;
+  } else {
+    select.value = '';
+  }
+}
+
+function focusTransactions(matatu){
+  const select = $('tx_matatu');
+  if (select && matatu && matatu.matatu_id) {
+    if (!Array.from(select.options).some((opt) => opt.value === matatu.matatu_id)) {
+      refreshMatatuOptions();
+    }
+    select.value = matatu.matatu_id;
+  }
+  const plateInput = $('tx_plate');
+  if (plateInput) plateInput.value = '';
+  const fromInput = $('tx_from');
+  const toInput = $('tx_to');
+  if (fromInput) fromInput.value = '';
+  if (toInput) toInput.value = '';
+  location.hash = '#transactions';
 }
 
 function cell(text, mono=false){
@@ -247,8 +299,13 @@ async function loadTransactions(){
   const hint = $('tx_hint');
   const table = $('tx_tbl');
   const tbody = table.querySelector('tbody');
+  const summaryEl = $('tx_summary');
   if (!hint || !table || !tbody) return;
 
+  if (summaryEl) {
+    summaryEl.style.display = 'none';
+    summaryEl.textContent = '';
+  }
   hint.style.display = 'block';
   hint.textContent = 'Loading transactions...';
   table.style.display = 'none';
@@ -256,14 +313,35 @@ async function loadTransactions(){
 
   const params = new URLSearchParams();
   const plateQuery = ($('tx_plate')?.value || '').trim();
+  const matatuId = $('tx_matatu')?.value || '';
+  const fromVal = $('tx_from')?.value || '';
+  const toVal = $('tx_to')?.value || '';
+
+  if (fromVal && toVal && fromVal > toVal) {
+    hint.textContent = 'From date must be before To date.';
+    showToast('From date must be before To date');
+    return;
+  }
+
+  if (matatuId) params.set('matatu_id', matatuId);
   if (plateQuery) params.set('plate', plateQuery);
+  if (fromVal) params.set('from', fromVal);
+  if (toVal) params.set('to', toVal);
   const url = params.toString() ? `/api/transactions?${params.toString()}` : '/api/transactions';
+  const selectedMatatu = matatuId ? _matatus.find((m) => m.matatu_id === matatuId) : null;
 
   try {
     const out = await api(url);
     _transactions = out.items || [];
+    const summary = out.summary || { total: _transactions.length, total_today: 0 };
+    _lastTxSummary = summary;
     renderTransactions(_transactions);
+    updateTransactionsSummary(summary, {
+      matatu: selectedMatatu,
+      filters: { from: fromVal, to: toVal, plate: plateQuery }
+    });
   } catch (err) {
+    updateTransactionsSummary(null);
     hint.style.display = 'block';
     hint.textContent = 'Failed to load transactions.';
     showToast(err.message || 'Failed to load transactions');
@@ -329,6 +407,40 @@ function statusCell(status){
   return td;
 }
 
+function updateTransactionsSummary(summary, context = {}) {
+  const summaryEl = $('tx_summary');
+  if (!summaryEl) return;
+  if (!summary) {
+    summaryEl.style.display = 'none';
+    summaryEl.textContent = '';
+    return;
+  }
+  const total = formatNumber(summary.total);
+  const today = formatNumber(summary.total_today);
+  const parts = [];
+  if (context.matatu && (context.matatu.plate || context.matatu.matatu_id)) {
+    parts.push(`Matatu ${context.matatu.plate || context.matatu.matatu_id}`);
+  } else if (context.filters && context.filters.plate) {
+    parts.push(`Plate like "${context.filters.plate}"`);
+  }
+  if (context.filters) {
+    const { from, to } = context.filters;
+    if (from && to) parts.push(`Range ${from} → ${to}`);
+    else if (from) parts.push(`From ${from}`);
+    else if (to) parts.push(`Up to ${to}`);
+  }
+  parts.push(`Total in range: ${total}`);
+  parts.push(`Today: ${today}`);
+  summaryEl.textContent = parts.join(' • ');
+  summaryEl.style.display = 'block';
+}
+
+function formatNumber(value){
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '0';
+  return num.toLocaleString();
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   initNav();
   initRouter();
@@ -340,6 +452,33 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('btn-list-refresh').addEventListener('click', loadMatatus);
   $('list_filter').addEventListener('input', filterList);
   $('btn-tx-load').addEventListener('click', loadTransactions);
+  const txMatatu = $('tx_matatu');
+  if (txMatatu) txMatatu.addEventListener('change', () => loadTransactions().catch(() => {}));
+  const txPlate = $('tx_plate');
+  if (txPlate) {
+    txPlate.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        loadTransactions().catch(() => {});
+      }
+    });
+  }
+  ['tx_from', 'tx_to'].forEach((id) => {
+    const el = $(id);
+    if (el) el.addEventListener('change', () => loadTransactions().catch(() => {}));
+  });
+  const resetBtn = $('btn-tx-reset');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      if (txMatatu) txMatatu.value = '';
+      if (txPlate) txPlate.value = '';
+      const fromEl = $('tx_from');
+      const toEl = $('tx_to');
+      if (fromEl) fromEl.value = '';
+      if (toEl) toEl.value = '';
+      loadTransactions().catch(() => {});
+    });
+  }
 
   const ok = await ensureAuth();
   if(!ok) return;

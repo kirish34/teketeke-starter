@@ -197,6 +197,27 @@ function normalizeMsisdn(v) {
   return s;
 }
 
+function parseRangeDate(value, endOfDay = false) {
+  if (!value) return null;
+  let str = String(value).trim();
+  if (!str) return null;
+  if (!str.includes('T')) {
+    str = `${str}${endOfDay ? 'T23:59:59.999' : 'T00:00:00'}`;
+  }
+  const parsed = new Date(str);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString();
+}
+
+function getTodayBounds() {
+  const now = new Date();
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(now);
+  end.setHours(23, 59, 59, 999);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
 // ---- Simple in-memory rate limiter ----
 function createRateLimiter({ windowMs, max, keyGenerator }) {
   const store = new Map();
@@ -454,7 +475,7 @@ app.get(
   '/api/transactions',
   requireAdmin,
   asApi(async (req) => {
-    const { matatu_id, plate, status, limit } = req.query || {};
+    const { matatu_id, plate, status, limit, from, to } = req.query || {};
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
     const normalizedStatus = typeof status === 'string' ? status.trim().toLowerCase() : '';
     const normalizedPlate = typeof plate === 'string' ? plate.trim() : '';
@@ -462,6 +483,43 @@ app.get(
     if (normalizedStatus && !allowedStatuses.includes(normalizedStatus)) {
       throw new Error('Invalid status filter');
     }
+
+    const matatuIdsSet = new Set();
+    if (matatu_id) matatuIdsSet.add(matatu_id);
+
+    if (!matatu_id && normalizedPlate) {
+      const { data: matched, error: matchErr } = await supabase
+        .from('matatus')
+        .select('id')
+        .ilike('plate', `%${normalizedPlate}%`)
+        .limit(20);
+      if (matchErr) throw matchErr;
+      (matched || []).forEach((row) => {
+        if (row && row.id) matatuIdsSet.add(row.id);
+      });
+      if (matatuIdsSet.size === 0) {
+        return { items: [], summary: { total: 0, total_today: 0 } };
+      }
+    }
+
+    const matatuIds = Array.from(matatuIdsSet);
+    const fromIso = parseRangeDate(from, false);
+    const toIso = parseRangeDate(to, true);
+    const { start: todayStartIso, end: todayEndIso } = getTodayBounds();
+
+    const applyFilters = (builder, opts = {}) => {
+      const { dateFrom, dateTo } = opts;
+      if (matatuIds.length === 1) {
+        builder = builder.eq('matatu_id', matatuIds[0]);
+      } else if (matatuIds.length > 1) {
+        builder = builder.in('matatu_id', matatuIds);
+      }
+      if (normalizedStatus) builder = builder.eq('status', normalizedStatus);
+      if (dateFrom) builder = builder.gte('created_at', dateFrom);
+      if (dateTo) builder = builder.lte('created_at', dateTo);
+      return builder;
+    };
+
     const selectColumns = `
       id,
       matatu_id,
@@ -478,16 +536,26 @@ app.get(
       )
     `;
 
-    let query = supabase.from('transactions').select(selectColumns).order('created_at', { ascending: false }).limit(parsedLimit);
+    const [dataRes, countRes, todayRes] = await Promise.all([
+      applyFilters(
+        supabase.from('transactions').select(selectColumns).order('created_at', { ascending: false }).limit(parsedLimit),
+        { dateFrom: fromIso, dateTo: toIso }
+      ),
+      applyFilters(
+        supabase.from('transactions').select('id', { count: 'exact', head: true }),
+        { dateFrom: fromIso, dateTo: toIso }
+      ),
+      applyFilters(
+        supabase.from('transactions').select('id', { count: 'exact', head: true }),
+        { dateFrom: todayStartIso, dateTo: todayEndIso }
+      )
+    ]);
 
-    if (matatu_id) query = query.eq('matatu_id', matatu_id);
-    if (normalizedStatus) query = query.eq('status', normalizedStatus);
-    if (normalizedPlate) query = query.ilike('matatus.plate', `%${normalizedPlate}%`);
+    if (dataRes.error) throw dataRes.error;
+    if (countRes.error) throw countRes.error;
+    if (todayRes.error) throw todayRes.error;
 
-    const { data, error } = await query;
-    if (error) throw error;
-
-    const items = (data || []).map((row) => ({
+    const items = (dataRes.data || []).map((row) => ({
       id: row.id,
       matatu_id: row.matatu_id,
       amount: Number(row.amount || 0),
@@ -499,7 +567,13 @@ app.get(
       matatu: row.matatus ? { plate: row.matatus.plate || null, till_number: row.matatus.till_number || null, name: row.matatus.name || null } : null
     }));
 
-    return { items };
+    return {
+      items,
+      summary: {
+        total: typeof countRes.count === 'number' ? countRes.count : 0,
+        total_today: typeof todayRes.count === 'number' ? todayRes.count : 0
+      }
+    };
   })
 );
 
