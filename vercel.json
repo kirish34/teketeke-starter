@@ -1,6 +1,7 @@
 {
   "version": 2,
   "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index" },
     { "source": "/", "destination": "/api/index" },
     { "source": "/login", "destination": "/api/login" },
     { "source": "/login.html", "destination": "/api/login" }
