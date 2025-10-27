@@ -65,10 +65,7 @@
   <div class="content">
     <header>
       <div><strong>Admin Console</strong> <span class="muted">• matatus only</span></div>
-      <div class="header-right">
-        <input id="admin_token" placeholder="ADMIN_TOKEN" style="min-width:260px">
-        <button class="secondary" type="button" onclick="saveToken()">Save</button>
-      </div>
+      <button class="secondary" type="button" onclick="logout()">Logout</button>
     </header>
 
     <main>
@@ -161,9 +158,9 @@
       <section id="section-session" class="section">
         <div class="card">
           <h2>Session</h2>
-          <div class="muted">Your ADMIN_TOKEN is stored locally and attached to all API calls as <span class="mono">x-admin-token</span>.</div>
+          <div class="muted">You are signed in. Use the button below to end the session.</div>
           <div class="actions" style="margin-top:8px">
-            <button class="secondary" type="button" onclick="clearToken()">Clear token</button>
+            <button class="secondary" type="button" onclick="logout()">Logout</button>
           </div>
         </div>
       </section>
@@ -177,18 +174,18 @@
     const UI_USSD_ROOT = '123'; // display only (backend has its own USSD_ROOT)
     const $ = (id)=>document.getElementById(id);
 
-    // token storage
-    function getAdminToken(){ return localStorage.getItem('tt_admin_token') || ''; }
-    function saveToken(){ localStorage.setItem('tt_admin_token', $('admin_token').value.trim()); showToast('Saved token'); }
-    function clearToken(){ localStorage.removeItem('tt_admin_token'); $('admin_token').value=''; showToast('Cleared'); }
-
     // nav
     function showSection(key){
       const map = {register:'section-register', edit:'section-edit', list:'section-list', transactions:'section-transactions', session:'section-session'};
+      const target = map[key];
+      if(!target) return;
       document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-      document.getElementById(map[key]).classList.add('active');
+      const sectionEl = document.getElementById(target);
+      if(sectionEl) sectionEl.classList.add('active');
       document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
-      document.getElementById('nav-'+key.replace('transactions','trans')).classList.add('active');
+      const navId = key === 'transactions' ? 'nav-trans' : `nav-${key}`;
+      const navBtn = document.getElementById(navId);
+      if(navBtn) navBtn.classList.add('active');
       if(key==='list') loadMatatus();
     }
 
@@ -384,7 +381,6 @@
 
     // init
     (async function init(){
-      $('admin_token').value = getAdminToken();
       const ok = await ensureAuth();
       if(!ok) return;
       await fetchConfig();
