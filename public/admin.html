@@ -174,20 +174,48 @@
     const UI_USSD_ROOT = '123'; // display only (backend has its own USSD_ROOT)
     const $ = (id)=>document.getElementById(id);
 
-    // nav
-    function showSection(key){
-      const map = {register:'section-register', edit:'section-edit', list:'section-list', transactions:'section-transactions', session:'section-session'};
-      const target = map[key];
-      if(!target) return;
+    // -------- NAV: hash-based routing (FIX) --------
+    function showSection(key, { updateHash = true } = {}) {
+      const map = {
+        register: 'section-register',
+        edit: 'section-edit',
+        list: 'section-list',
+        transactions: 'section-transactions',
+        session: 'section-session'
+      };
+
+      if (!map[key]) key = 'register';
+
+      // update hash so back/forward & deep links work
+      if (updateHash && location.hash !== '#' + key) {
+        location.hash = key;
+      }
+
+      // toggle sections
       document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-      const sectionEl = document.getElementById(target);
-      if(sectionEl) sectionEl.classList.add('active');
+      const sectionEl = document.getElementById(map[key]);
+      if (sectionEl) sectionEl.classList.add('active');
+
+      // toggle nav active state
       document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
-      const navId = key === 'transactions' ? 'nav-trans' : `nav-${key}`;
+      const navId = (key === 'transactions') ? 'nav-trans' : `nav-${key}`;
       const navBtn = document.getElementById(navId);
-      if(navBtn) navBtn.classList.add('active');
-      if(key==='list') loadMatatus();
+      if (navBtn) navBtn.classList.add('active');
+
+      // lazy-load when opening list
+      if (key === 'list') loadMatatus();
     }
+
+    function syncFromHash() {
+      const key = (location.hash || '#register').slice(1);
+      showSection(key, { updateHash: false });
+    }
+
+    function initRouter() {
+      syncFromHash();
+      window.addEventListener('hashchange', syncFromHash);
+    }
+    // -------- NAV END --------
 
     // toast
     async function ensureAuth(){
@@ -378,7 +406,6 @@
 
     // TRANSACTIONS (placeholder)
     async function loadTransactions(){
-      // TODO: implement when backend exposes GET /api/transactions (optionally ?matatu_id=)
       $('tx_tbl').style.display = 'none';
       $('tx_hint').style.display = 'block';
       showToast('Add /api/transactions on server to enable this');
@@ -389,7 +416,7 @@
       const ok = await ensureAuth();
       if(!ok) return;
       await fetchConfig();
-      await loadMatatus();
+      initRouter();   // <= enable hash-based nav
     })();
   </script>
 </body>
