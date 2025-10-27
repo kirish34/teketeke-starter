@@ -76,7 +76,8 @@ function showToast(msg) {
 
 async function api(path, opts = {}) {
   const headers = { 'content-type': 'application/json', ...(opts.headers || {}) };
-  const res = await fetch(path, { ...opts, headers });
+  const request = { credentials: 'include', ...opts, headers };
+  const res = await fetch(path, request);
   if (res.status === 401) {
     window.location.href = '/login.html';
     throw new Error('unauthorized');
@@ -87,7 +88,7 @@ async function api(path, opts = {}) {
 }
 
 async function ensureAuth(){
-  const res = await fetch('/api/auth/me');
+  const res = await fetch('/api/auth/me', { credentials: 'include' });
   if (!res.ok) { window.location.href = '/login.html'; return false; }
   return true;
 }
@@ -99,8 +100,9 @@ async function fetchConfig(){
   } catch (_) {}
 }
 
-async function logout(){
-  try { await fetch('/api/auth/logout', { method:'POST' }); } catch(_){ }
+async function logout(event){
+  if (event) event.preventDefault();
+  try { await fetch('/api/auth/logout', { method:'POST', credentials:'include' }); } catch(_){ }
   window.location.href = '/login.html';
 }
 
@@ -118,7 +120,7 @@ async function createMatatu(e){
   await api(`/api/matatus/${id}/till`, { method:'POST', body: JSON.stringify({ till_number: till }) });
   const alloc = await api(`/api/matatus/${id}/ussd`, { method:'POST' });
 
-  showToast(`Saved • Till ${till} • ${alloc.dial}`);
+  showToast(`Saved - Till ${till} - ${alloc.dial}`);
   $('new_plate').value = ''; $('new_name').value = ''; $('new_sacco').value = ''; $('new_till').value = '';
   await loadMatatus();
   return false;
@@ -214,7 +216,7 @@ function renderEdit(x){
         <div class="mono muted">Till Number</div>
         <div class="mono" id="ed_till">${x.till_number || ''}</div>
         <div class="mono muted" style="margin-top:8px">USSD Code</div>
-        <div class="mono">${x.ussd_code || ''} ${dial ? `• ${dial}` : ''}</div>
+        <div class="mono">${x.ussd_code || ''} ${dial ? `- ${dial}` : ''}</div>
       </div>
     </div>
     <div class="actions">
@@ -245,8 +247,9 @@ async function loadTransactions(){
 document.addEventListener('DOMContentLoaded', async () => {
   initNav();
   initRouter();
-  $('btn-logout').addEventListener('click', logout);
-  $('btn-logout-2').addEventListener('click', logout);
+  document.querySelectorAll('[data-action="logout"]').forEach(btn => {
+    btn.addEventListener('click', logout);
+  });
   $('form-register').addEventListener('submit', createMatatu);
   $('btn-edit-search').addEventListener('click', searchMatatu);
   $('btn-list-refresh').addEventListener('click', loadMatatus);
@@ -258,3 +261,4 @@ document.addEventListener('DOMContentLoaded', async () => {
   await fetchConfig();
   await loadMatatus();
 });
+

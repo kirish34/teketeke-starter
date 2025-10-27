@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>TekeTeke — Admin Console</title>
+  <title>TekeTeke - Admin Console</title>
   <style>
     :root{
       --brand:#0ea5e9; --ink:#0b0b0c; --bg:#f6fbff; --panel:#fff; --muted:#6b7280;
@@ -58,8 +58,8 @@
 
   <div class="content">
     <header>
-      <div><strong>Admin Console</strong> <span class="muted">• matatus only</span></div>
-      <button id="btn-logout" class="secondary" type="button">Logout</button>
+      <div><strong>Admin Console</strong> <span class="muted">&bull; matatus only</span></div>
+      <button id="btn-logout" class="secondary" type="button" data-action="logout">Logout</button>
     </header>
 
     <main>
@@ -85,10 +85,10 @@
         <div class="card">
           <h2>Edit Existing Matatu</h2>
           <div class="toolbar">
-            <input id="edit_search" placeholder="Search by plate…">
+            <input id="edit_search" placeholder="Search by plate..." />
             <button id="btn-edit-search" class="secondary" type="button">Search</button>
           </div>
-          <div id="edit_result" class="muted">Search to load a matatu…</div>
+          <div id="edit_result" class="muted">Search to load a matatu...</div>
         </div>
       </section>
 
@@ -97,12 +97,19 @@
           <div class="toolbar">
             <h2 style="margin:0">Matatu List</h2>
             <button id="btn-list-refresh" class="secondary" type="button">Refresh</button>
-            <input id="list_filter" placeholder="Filter by plate…">
+            <input id="list_filter" placeholder="Filter by plate..." />
           </div>
           <table id="tbl">
             <thead>
               <tr>
-                <th>ID</th><th>Plate</th><th>Till</th><th>USSD</th><th>Dial</th><th>Success</th><th>Last Tx</th></tr>
+                <th>ID</th>
+                <th>Plate</th>
+                <th>Till</th>
+                <th>USSD</th>
+                <th>Dial</th>
+                <th>Success</th>
+                <th>Last Tx</th>
+              </tr>
             </thead>
             <tbody></tbody>
           </table>
@@ -113,16 +120,21 @@
         <div class="card">
           <h2>Transactions</h2>
           <div class="toolbar">
-            <input id="tx_plate" placeholder="Search by plate (optional)">
+            <input id="tx_plate" placeholder="Search by plate (optional)" />
             <button id="btn-tx-load" class="secondary" type="button">Load</button>
           </div>
           <div class="muted" id="tx_hint">
-            Backend endpoint for transactions is not implemented in the starter. Add <code>GET /api/transactions?matatu_id=&lt;uuid&gt;</code> and we’ll render them here.
+            Backend endpoint for transactions is not implemented in the starter. Add <code>GET /api/transactions?matatu_id=&lt;uuid&gt;</code> and we'll render them here.
           </div>
           <table id="tx_tbl" style="display:none">
             <thead>
               <tr>
-                <th>Time</th><th>Plate</th><th>MSISDN</th><th>Amount</th><th>Status</th><th>Receipt</th>
+                <th>Time</th>
+                <th>Plate</th>
+                <th>MSISDN</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Receipt</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -135,7 +147,7 @@
           <h2>Session</h2>
           <div class="muted">You are signed in. Use the button below to end the session.</div>
           <div class="actions" style="margin-top:8px">
-            <button id="btn-logout-2" class="secondary" type="button">Logout</button>
+            <button id="btn-logout-2" class="secondary" type="button" data-action="logout">Logout</button>
           </div>
         </div>
       </section>
@@ -146,5 +158,3 @@
   <script src="./js/admin.js" defer></script>
 </body>
 </html>
-
-
