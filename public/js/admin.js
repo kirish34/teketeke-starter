@@ -34,7 +34,11 @@ function showSection(key, { updateHash = true } = {}) {
     const btnKey = buttonKey(btn);
     btn.classList.toggle('active', btnKey === key);
   });
-  if (key === 'list') loadMatatus().catch(() => {});
+  if (key === 'list') {
+    loadMatatus().catch(() => {});
+  } else if (key === 'transactions') {
+    loadTransactions().catch(() => {});
+  }
 }
 
 function syncFromHash() {
@@ -127,6 +131,7 @@ async function createMatatu(e){
 }
 
 let _matatus = [];
+let _transactions = [];
 async function loadMatatus(){
   const out = await api('/api/matatus');
   _matatus = out.items || [];
@@ -239,9 +244,89 @@ async function editChangeTill(id, plate, current){
 }
 
 async function loadTransactions(){
-  $('tx_tbl').style.display = 'none';
-  $('tx_hint').style.display = 'block';
-  showToast('Add /api/transactions on server to enable this');
+  const hint = $('tx_hint');
+  const table = $('tx_tbl');
+  const tbody = table.querySelector('tbody');
+  if (!hint || !table || !tbody) return;
+
+  hint.style.display = 'block';
+  hint.textContent = 'Loading transactions...';
+  table.style.display = 'none';
+  tbody.innerHTML = '';
+
+  const params = new URLSearchParams();
+  const plateQuery = ($('tx_plate')?.value || '').trim();
+  if (plateQuery) params.set('plate', plateQuery);
+  const url = params.toString() ? `/api/transactions?${params.toString()}` : '/api/transactions';
+
+  try {
+    const out = await api(url);
+    _transactions = out.items || [];
+    renderTransactions(_transactions);
+  } catch (err) {
+    hint.style.display = 'block';
+    hint.textContent = 'Failed to load transactions.';
+    showToast(err.message || 'Failed to load transactions');
+  }
+}
+
+function renderTransactions(items){
+  const hint = $('tx_hint');
+  const table = $('tx_tbl');
+  const tbody = table.querySelector('tbody');
+  if (!hint || !table || !tbody) return;
+
+  tbody.innerHTML = '';
+  if (!items.length) {
+    hint.style.display = 'block';
+    hint.textContent = 'No transactions found.';
+    table.style.display = 'none';
+    return;
+  }
+
+  hint.style.display = 'none';
+  table.style.display = 'table';
+
+  items.forEach((tx) => {
+    const tr = document.createElement('tr');
+    tr.append(
+      cell(formatDateTime(tx.created_at), true),
+      cell((tx.matatu && tx.matatu.plate) || '', true),
+      cell(tx.msisdn || ''),
+      cell(formatAmount(tx.amount), true),
+      statusCell(tx.status),
+      cell(tx.mpesa_receipt || tx.gateway_ref || '')
+    );
+    tbody.appendChild(tr);
+  });
+}
+
+function formatAmount(value){
+  const num = Number(value);
+  if (!Number.isFinite(num)) return 'KES 0.00';
+  const formatted = num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `KES ${formatted}`;
+}
+
+function formatDateTime(iso){
+  if (!iso) return '';
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return iso;
+  return dt.toLocaleString();
+}
+
+function statusCell(status){
+  const td = document.createElement('td');
+  const span = document.createElement('span');
+  const value = String(status || '').toLowerCase();
+  span.className = 'pill';
+  if (value) {
+    const slug = value.replace(/[^a-z0-9-]/g, '');
+    if (slug) span.classList.add(`pill-${slug}`);
+  }
+  span.textContent = value ? value.charAt(0).toUpperCase() + value.slice(1) : '';
+  td.appendChild(span);
+  return td;
 }
 
 document.addEventListener('DOMContentLoaded', async () => {

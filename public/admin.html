@@ -35,6 +35,9 @@
     th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle}
     .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
     .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#e0f2fe;color:#075985;font-size:.85rem}
+    .pill-success{background:#dcfce7;color:#166534}
+    .pill-failed{background:#fee2e2;color:#991b1b}
+    .pill-pending,.pill-timeout{background:#fef3c7;color:#92400e}
     .toast{position:fixed;right:16px;top:16px;background:#111827;color:#fff;padding:10px 14px;border-radius:12px;opacity:0;transition:opacity .2s, transform .2s;transform:translateY(-10px);z-index:1000}
     .toast.show{opacity:1;transform:translateY(0)}
     .section{display:none}
@@ -123,9 +126,7 @@
             <input id="tx_plate" placeholder="Search by plate (optional)" />
             <button id="btn-tx-load" class="secondary" type="button">Load</button>
           </div>
-          <div class="muted" id="tx_hint">
-            Backend endpoint for transactions is not implemented in the starter. Add <code>GET /api/transactions?matatu_id=&lt;uuid&gt;</code> and we'll render them here.
-          </div>
+          <div class="muted" id="tx_hint">Enter a plate (optional) and select Load to view recent transactions.</div>
           <table id="tx_tbl" style="display:none">
             <thead>
               <tr>

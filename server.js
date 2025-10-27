@@ -450,6 +450,59 @@ app.get(
   })
 );
 
+app.get(
+  '/api/transactions',
+  requireAdmin,
+  asApi(async (req) => {
+    const { matatu_id, plate, status, limit } = req.query || {};
+    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+    const normalizedStatus = typeof status === 'string' ? status.trim().toLowerCase() : '';
+    const normalizedPlate = typeof plate === 'string' ? plate.trim() : '';
+    const allowedStatuses = ['pending', 'success', 'failed', 'timeout'];
+    if (normalizedStatus && !allowedStatuses.includes(normalizedStatus)) {
+      throw new Error('Invalid status filter');
+    }
+    const selectColumns = `
+      id,
+      matatu_id,
+      amount,
+      msisdn,
+      status,
+      mpesa_receipt,
+      gateway_ref,
+      created_at,
+      matatus:matatu_id (
+        plate,
+        till_number,
+        name
+      )
+    `;
+
+    let query = supabase.from('transactions').select(selectColumns).order('created_at', { ascending: false }).limit(parsedLimit);
+
+    if (matatu_id) query = query.eq('matatu_id', matatu_id);
+    if (normalizedStatus) query = query.eq('status', normalizedStatus);
+    if (normalizedPlate) query = query.ilike('matatus.plate', `%${normalizedPlate}%`);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const items = (data || []).map((row) => ({
+      id: row.id,
+      matatu_id: row.matatu_id,
+      amount: Number(row.amount || 0),
+      msisdn: row.msisdn || null,
+      status: row.status,
+      mpesa_receipt: row.mpesa_receipt || null,
+      gateway_ref: row.gateway_ref || null,
+      created_at: row.created_at,
+      matatu: row.matatus ? { plate: row.matatus.plate || null, till_number: row.matatus.till_number || null, name: row.matatus.name || null } : null
+    }));
+
+    return { items };
+  })
+);
+
 app.post(
   '/api/mpesa/callback',
   callbackLimiter,
