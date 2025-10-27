@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -12,7 +12,6 @@
     *{box-sizing:border-box}
     html,body{height:100%}
     body{margin:0;background:var(--bg);font-family:system-ui,Arial,sans-serif;color:var(--ink);display:flex}
-    /* Layout */
     .sidebar{width:240px;background:var(--sidebar);color:var(--sidebarInk);display:flex;flex-direction:column}
     .brand{padding:16px 18px;border-bottom:1px solid #0f172a;font-weight:800;color:#fff}
     .nav{padding:10px}
@@ -20,9 +19,7 @@
     .nav button.active,.nav button:hover{background:#111827;color:#fff;border-color:#1f2937}
     .content{flex:1;display:flex;flex-direction:column;min-width:0}
     header{background:var(--panel);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;align-items:center;gap:12px;justify-content:space-between}
-    .header-right{display:flex;align-items:center;gap:8px}
     main{max-width:1100px;margin:18px auto;padding:0 16px;width:100%}
-    /* Cards & forms */
     .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;box-shadow:0 4px 16px rgba(2,132,199,.06)}
     h2{margin:0 0 10px}
     .muted{color:var(--muted)}
@@ -34,15 +31,12 @@
     button.secondary{background:#111827;color:#fff;border:none;cursor:pointer}
     .actions{display:flex;gap:8px;flex-wrap:wrap}
     .danger{background:#b91c1c;color:#fff;border:none}
-    /* Tables */
     table{width:100%;border-collapse:collapse}
     th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle}
     .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
     .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#e0f2fe;color:#075985;font-size:.85rem}
-    /* Toast */
     .toast{position:fixed;right:16px;top:16px;background:#111827;color:#fff;padding:10px 14px;border-radius:12px;opacity:0;transition:opacity .2s, transform .2s;transform:translateY(-10px);z-index:1000}
     .toast.show{opacity:1;transform:translateY(0)}
-    /* Sections */
     .section{display:none}
     .section.active{display:block}
     .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
@@ -50,32 +44,30 @@
   </style>
 </head>
 <body>
- <aside class="sidebar">
-  <div class="brand">TekeTeke Admin</div>
-  <div class="nav">
-    <button id="nav-register" class="active" data-section="register">Register New Matatu</button>
-    <button id="nav-edit" data-section="edit">Edit Existing Matatu</button>
-    <button id="nav-list" data-section="list">Matatu List</button>
-    <button id="nav-trans" data-section="transactions">Transactions</button>
-    <hr style="border:0;border-top:1px solid #1f2937;margin:10px 0">
-    <button id="nav-session" data-section="session">Session</button>
-  </div>
-</aside>
-
+  <aside class="sidebar">
+    <div class="brand">TekeTeke Admin</div>
+    <div class="nav">
+      <button id="nav-register" data-section="register" class="active" type="button">Register New Matatu</button>
+      <button id="nav-edit" data-section="edit" type="button">Edit Existing Matatu</button>
+      <button id="nav-list" data-section="list" type="button">Matatu List</button>
+      <button id="nav-trans" data-section="transactions" type="button">Transactions</button>
+      <hr style="border:0;border-top:1px solid #1f2937;margin:10px 0">
+      <button id="nav-session" data-section="session" type="button">Session</button>
+    </div>
+  </aside>
 
   <div class="content">
     <header>
       <div><strong>Admin Console</strong> <span class="muted">• matatus only</span></div>
-      <button class="secondary" type="button" onclick="logout()">Logout</button>
+      <button id="btn-logout" class="secondary" type="button">Logout</button>
     </header>
 
     <main>
-      <!-- Register -->
       <section id="section-register" class="section active">
         <div class="card">
           <h2>Register New Matatu</h2>
           <div class="muted">Plate + Till are required. USSD is allocated automatically.</div>
-          <form onsubmit="return createMatatu(event)">
+          <form id="form-register">
             <div class="row">
               <input id="new_plate" placeholder="Number plate (e.g., KDA 123A)" required />
               <input id="new_name" placeholder="Alias name (optional)" />
@@ -84,42 +76,33 @@
               <input id="new_till" placeholder="Till number" required />
               <input id="new_sacco" placeholder="SACCO name (optional)" />
             </div>
-            <button class="primary">Create / Update</button>
+            <button class="primary" type="submit">Create / Update</button>
           </form>
         </div>
       </section>
 
-      <!-- Edit -->
       <section id="section-edit" class="section">
         <div class="card">
           <h2>Edit Existing Matatu</h2>
           <div class="toolbar">
             <input id="edit_search" placeholder="Search by plate…">
-            <button class="secondary" type="button" onclick="searchMatatu()">Search</button>
+            <button id="btn-edit-search" class="secondary" type="button">Search</button>
           </div>
           <div id="edit_result" class="muted">Search to load a matatu…</div>
         </div>
       </section>
 
-      <!-- List -->
       <section id="section-list" class="section">
         <div class="card">
           <div class="toolbar">
             <h2 style="margin:0">Matatu List</h2>
-            <button class="secondary" type="button" onclick="loadMatatus()">Refresh</button>
-            <input id="list_filter" placeholder="Filter by plate…" oninput="filterList()">
+            <button id="btn-list-refresh" class="secondary" type="button">Refresh</button>
+            <input id="list_filter" placeholder="Filter by plate…">
           </div>
           <table id="tbl">
             <thead>
               <tr>
-                <th>ID</th>
-                <th>Plate</th>
-                <th>Till</th>
-                <th>USSD</th>
-                <th>Dial</th>
-                <th>Success</th>
-                <th>Last Tx</th>
-                <th>Actions</th>
+                <th>ID</th><th>Plate</th><th>Till</th><th>USSD</th><th>Dial</th><th>Success</th><th>Last Tx</th><th>Actions</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -127,27 +110,20 @@
         </div>
       </section>
 
-      <!-- Transactions -->
       <section id="section-transactions" class="section">
         <div class="card">
           <h2>Transactions</h2>
           <div class="toolbar">
             <input id="tx_plate" placeholder="Search by plate (optional)">
-            <button class="secondary" type="button" onclick="loadTransactions()">Load</button>
+            <button id="btn-tx-load" class="secondary" type="button">Load</button>
           </div>
           <div class="muted" id="tx_hint">
-            Backend endpoint for transactions is not implemented in the starter. Add <code>GET /api/transactions?matatu_id=&lt;uuid&gt;</code>
-            and we’ll render them here.
+            Backend endpoint for transactions is not implemented in the starter. Add <code>GET /api/transactions?matatu_id=&lt;uuid&gt;</code> and we’ll render them here.
           </div>
           <table id="tx_tbl" style="display:none">
             <thead>
               <tr>
-                <th>Time</th>
-                <th>Plate</th>
-                <th>MSISDN</th>
-                <th>Amount</th>
-                <th>Status</th>
-                <th>Receipt</th>
+                <th>Time</th><th>Plate</th><th>MSISDN</th><th>Amount</th><th>Status</th><th>Receipt</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -155,13 +131,12 @@
         </div>
       </section>
 
-      <!-- Session -->
       <section id="section-session" class="section">
         <div class="card">
           <h2>Session</h2>
           <div class="muted">You are signed in. Use the button below to end the session.</div>
           <div class="actions" style="margin-top:8px">
-            <button class="secondary" type="button" onclick="logout()">Logout</button>
+            <button id="btn-logout-2" class="secondary" type="button">Logout</button>
           </div>
         </div>
       </section>
@@ -169,312 +144,6 @@
   </div>
 
   <div id="toast" class="toast">Saved</div>
-
-<script>
-  const UI_USSD_ROOT = '123';
-  const $ = id => document.getElementById(id);
-
-  const sectionMap = {
-    register: 'section-register',
-    edit: 'section-edit',
-    list: 'section-list',
-    transactions: 'section-transactions',
-    session: 'section-session'
-  };
-
-  function buttonKey(btn) {
-    if (!btn) return null;
-    if (btn.dataset.section) return btn.dataset.section;
-    if (btn.id) {
-      let derived = btn.id.replace(/^nav-/, '');
-      if (derived === 'trans') derived = 'transactions';
-      return derived;
-    }
-    return null;
-  }
-
-  function showSection(key, { updateHash = true } = {}) {
-    if (!sectionMap[key]) key = 'register';
-
-    if (updateHash && location.hash !== `#${key}`) {
-      location.hash = key;
-    }
-
-    document.querySelectorAll('.section').forEach(section =>
-      section.classList.toggle('active', section.id === sectionMap[key])
-    );
-
-    document.querySelectorAll('.nav button').forEach(btn => {
-      const btnKey = buttonKey(btn);
-      btn.classList.toggle('active', btnKey === key);
-    });
-
-    if (key === 'list') loadMatatus();
-  }
-
-  function syncFromHash() {
-    const key = (location.hash || '#register').slice(1);
-    showSection(key, { updateHash: false });
-  }
-
-  function initNav() {
-    const nav = document.querySelector('.nav');
-    if (!nav) return;
-    nav.addEventListener('click', (event) => {
-      const btn = event.target.closest('button');
-      if (!btn || !nav.contains(btn)) return;
-      const key = buttonKey(btn);
-      if (!key) return;
-      btn.dataset.section = key;
-      event.preventDefault();
-      showSection(key);
-    });
-    nav.querySelectorAll('button').forEach(btn => {
-      const key = buttonKey(btn);
-      if (key) btn.dataset.section = key;
-      btn.type = 'button';
-    });
-  }
-
-  function initRouter() {
-    syncFromHash();
-    window.addEventListener('hashchange', syncFromHash);
-  }
-
-  async function ensureAuth() {
-    try {
-      const res = await fetch('/api/auth/me');
-      if (!res.ok) throw new Error('unauthorized');
-      return true;
-    } catch {
-      window.location.href = '/login.html';
-      return false;
-    }
-  }
-
-  async function logout() {
-    try { await fetch('/api/auth/logout', { method: 'POST' }); } catch {}
-    window.location.href = '/login.html';
-  }
-
-  async function api(path, opts = {}) {
-    const headers = { 'content-type': 'application/json', ...(opts.headers || {}) };
-    const res = await fetch(path, { ...opts, headers });
-    if (res.status === 401) {
-      window.location.href = '/login.html';
-      throw new Error('unauthorized');
-    }
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.error || res.statusText);
-    return body;
-  }
-
-  async function fetchConfig() {
-    try {
-      const cfg = await api('/api/config');
-      if (cfg && cfg.ussd_root) UI_USSD_ROOT = String(cfg.ussd_root);
-    } catch (_) {}
-  }
-
-  async function createMatatu(e) {
-    e.preventDefault();
-    const plate = $('new_plate').value.trim();
-    const name = $('new_name').value.trim();
-    const sacco_name = $('new_sacco').value.trim();
-    const till = $('new_till').value.trim();
-    if (!plate || !till) {
-      showToast('Plate & till required');
-      return false;
-    }
-
-    const out = await api('/api/matatus', {
-      method: 'POST',
-      body: JSON.stringify({ plate, name, sacco_name })
-    });
-    const id = out.matatu.id;
-
-    await api(`/api/matatus/${id}/till`, {
-      method: 'POST',
-      body: JSON.stringify({ till_number: till })
-    });
-    const alloc = await api(`/api/matatus/${id}/ussd`, { method: 'POST' });
-
-    showToast(`Saved • Till ${till} • ${alloc.dial}`);
-    $('new_plate').value = '';
-    $('new_name').value = '';
-    $('new_sacco').value = '';
-    $('new_till').value = '';
-    await loadMatatus();
-    return false;
-  }
-
-  let _matatus = [];
-  async function loadMatatus() {
-    const out = await api('/api/matatus');
-    _matatus = out.items || [];
-    renderList(_matatus);
-  }
-
-  function filterList() {
-    const q = $('list_filter').value.trim().toUpperCase();
-    renderList(q ? _matatus.filter(x => (x.plate || '').toUpperCase().includes(q)) : _matatus);
-  }
-
-  function renderList(items) {
-    const tbody = document.querySelector('#tbl tbody');
-    tbody.innerHTML = '';
-    items.forEach(x => {
-      const tr = document.createElement('tr');
-      const tdDial = document.createElement('td');
-      const dial = x.ussd_code ? `*${UI_USSD_ROOT}*${x.ussd_code}#` : '';
-      if (dial) {
-        const span = document.createElement('span');
-        span.textContent = dial;
-        const btn = document.createElement('button');
-        btn.className = 'copybtn';
-        btn.type = 'button';
-        btn.textContent = 'Copy';
-        btn.addEventListener('click', () =>
-          navigator.clipboard.writeText(dial).then(() => showToast('Copied'))
-        );
-        tdDial.append(span, btn);
-      }
-      const actions = document.createElement('div');
-      actions.className = 'actions';
-      const btnTill = document.createElement('button');
-      btnTill.className = 'secondary';
-      btnTill.textContent = 'Change Till';
-      btnTill.onclick = () => changeTill(x);
-      const btnUssd = document.createElement('button');
-      btnUssd.className = 'secondary';
-      btnUssd.textContent = 'New USSD';
-      btnUssd.onclick = () => reassignUssd(x.matatu_id, x.plate);
-      const btnDelete = document.createElement('button');
-      btnDelete.className = 'danger';
-      btnDelete.textContent = 'Delete';
-      btnDelete.onclick = () => deleteMatatu(x.matatu_id, x.plate);
-      actions.append(btnTill, btnUssd, btnDelete);
-
-      tr.append(
-        cell(x.matatu_id, true),
-        cell(x.plate, true),
-        cell(x.till_number, true),
-        cell(x.ussd_code, true),
-        tdDial,
-        cell(x.total_success || 0),
-        cell(x.last_tx_at || '', true),
-        (() => {
-          const td = document.createElement('td');
-          td.appendChild(actions);
-          return td;
-        })()
-      );
-      tbody.appendChild(tr);
-    });
-  }
-
-  function cell(text, mono = false) {
-    const td = document.createElement('td');
-    if (mono) td.className = 'mono';
-    td.textContent = text || '';
-    return td;
-  }
-
-  async function changeTill(x) {
-    const next = prompt(`Enter new till for ${x.plate}`, x.till_number || '');
-    if (next == null) return;
-    const trimmed = next.trim();
-    if (!trimmed || trimmed === x.till_number) return;
-    await api(`/api/matatus/${x.matatu_id}/till`, {
-      method: 'POST',
-      body: JSON.stringify({ till_number: trimmed })
-    });
-    showToast('Till updated');
-    await loadMatatus();
-  }
-
-  async function reassignUssd(matatuId, plate) {
-    if (!matatuId) return;
-    if (!confirm(`Assign a new USSD code for ${plate || 'this matatu'}?`)) return;
-    const out = await api(`/api/matatus/${matatuId}/ussd/reassign`, { method: 'POST' });
-    showToast(`New USSD ${out.dial}`);
-    await loadMatatus();
-  }
-
-  async function deleteMatatu(matatuId, plate) {
-    if (!matatuId) return;
-    if (!confirm(`Delete matatu ${plate || ''}? This cannot be undone.`)) return;
-    await api(`/api/matatus/${matatuId}`, { method: 'DELETE' });
-    showToast('Matatu deleted');
-    await loadMatatus();
-  }
-
-  async function searchMatatu() {
-    const q = $('edit_search').value.trim().toUpperCase();
-    if (!q) {
-      $('edit_result').innerHTML = '<span class="muted">Enter a plate.</span>';
-      return;
-    }
-    const out = await api('/api/matatus');
-    const found = (out.items || []).find(x => (x.plate || '').toUpperCase() === q);
-    if (!found) {
-      $('edit_result').innerHTML = 'No match.';
-      return;
-    }
-    renderEdit(found);
-  }
-
-  function renderEdit(x) {
-    const dial = x.ussd_code ? `*${UI_USSD_ROOT}*${x.ussd_code}#` : '';
-    $('edit_result').innerHTML = `
-      <div class="row" style="margin-bottom:8px">
-        <div class="card">
-          <div class="mono muted">Matatu ID</div>
-          <div class="mono">${x.matatu_id}</div>
-          <div class="mono muted" style="margin-top:8px">Plate</div>
-          <div class="mono">${x.plate || ''}</div>
-        </div>
-        <div class="card">
-          <div class="mono muted">Till Number</div>
-          <div class="mono" id="ed_till">${x.till_number || ''}</div>
-          <div class="mono muted" style="margin-top:8px">USSD Code</div>
-          <div class="mono">${x.ussd_code || ''} ${dial ? `• ${dial}` : ''}</div>
-        </div>
-      </div>
-      <div class="actions">
-        <button class="secondary" type="button" onclick="editChangeTill('${x.matatu_id}','${x.plate||''}','${x.till_number||''}')">Edit Till</button>
-        <button class="secondary" type="button" onclick="reassignUssd('${x.matatu_id}','${x.plate||''}'); searchMatatu();">New USSD</button>
-        <button class="danger" type="button" onclick="deleteMatatu('${x.matatu_id}','${x.plate||''}'); $('edit_result').innerHTML='Deleted';">Delete</button>
-      </div>
-    `;
-  }
-
-  async function editChangeTill(id, plate, current) {
-    const next = prompt(`Enter new till for ${plate}`, current || '');
-    if (next == null) return;
-    const trimmed = next.trim();
-    if (!trimmed || trimmed === current) return;
-    await api(`/api/matatus/${id}/till`, {
-      method: 'POST',
-      body: JSON.stringify({ till_number: trimmed })
-    });
-    showToast('Till updated');
-    searchMatatu();
-  }
-
-  async function loadTransactions() {
-    $('tx_tbl').style.display = 'none';
-    $('tx_hint').style.display = 'block';
-    showToast('Add /api/transactions on server to enable this');
-  }
-
-  (async function init() {
-    const ok = await ensureAuth();
-    if (!ok) return;
-    await fetchConfig();
-    initNav();
-    initRouter();
-    await loadMatatus();
-  })();
-</script>
-  
+  <script src="./js/admin.js" defer></script>
+</body>
+</html>
