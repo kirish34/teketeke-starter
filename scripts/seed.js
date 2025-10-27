@@ -25,6 +25,7 @@ function getFlag(name, def) {
 const COUNT = Number(getFlag('count', 10));
 const START = Number(getFlag('start', 1));
 const ALLOCATE = Boolean(getFlag('allocate', false));
+const TX_PER = Number(getFlag('tx-per', 0));
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
   auth: { autoRefreshToken: false, persistSession: false },
@@ -41,7 +42,7 @@ function plateFor(n) {
 }
 
 async function main() {
-  console.log(`Seeding ${COUNT} matatus starting at index ${START} (allocate=${ALLOCATE})`);
+  console.log(`Seeding ${COUNT} matatus starting at index ${START} (allocate=${ALLOCATE}, tx-per=${TX_PER})`);
   const created = [];
   for (let i = 0; i < COUNT; i++) {
     const idx = START + i;
@@ -50,6 +51,7 @@ async function main() {
       plate,
       name: `Matatu ${idx}`,
       sacco_name: `SACCO ${Math.ceil(idx / 10)}`,
+      till_number: String(500100 + idx),
     };
     const { data, error } = await supabase
       .from('matatus')
@@ -75,6 +77,10 @@ async function main() {
   } else {
     console.table(created.map((m) => ({ id: m.id, plate: m.plate })));
   }
+
+  if (TX_PER > 0) {
+    await seedTransactions(created, TX_PER);
+  }
 }
 
 main().catch((e) => {
@@ -82,3 +88,47 @@ main().catch((e) => {
   process.exit(1);
 });
 
+async function seedTransactions(matatus, txPerMatatu) {
+  if (!matatus.length) {
+    console.log('No matatus available for transactions seeding.');
+    return;
+  }
+  const statuses = ['success', 'failed', 'pending'];
+  const seedId = Date.now();
+  let total = 0;
+  for (const matatu of matatus) {
+    for (let i = 0; i < txPerMatatu; i++) {
+      const status = statuses[Math.floor(Math.random() * statuses.length)];
+      const amount = (Math.floor(Math.random() * 40) + 10) * 10;
+      const msisdn = randomMsisdn();
+      const createdAt = randomRecentDate(10);
+      const { error } = await supabase.from('transactions').insert({
+        matatu_id: matatu.id,
+        amount,
+        msisdn,
+        status,
+        mpesa_receipt: status === 'success' ? `SEED${seedId}${total}` : null,
+        gateway_ref: `SEED-${seedId}-${matatu.id}-${i}`,
+        created_at: createdAt.toISOString(),
+      });
+      if (error) throw error;
+      total += 1;
+    }
+  }
+  console.log(`Seeded ${total} transactions across ${matatus.length} matatus`);
+}
+
+function randomMsisdn() {
+  const prefix = Math.random() > 0.2 ? '2547' : '2541';
+  const suffix = Math.floor(1000000 + Math.random() * 9000000).toString();
+  return prefix + suffix;
+}
+
+function randomRecentDate(withinDays = 7) {
+  const now = new Date();
+  const offset = Math.floor(Math.random() * withinDays);
+  const dt = new Date(now);
+  dt.setDate(now.getDate() - offset);
+  dt.setHours(Math.floor(Math.random() * 24), Math.floor(Math.random() * 60), Math.floor(Math.random() * 60), 0);
+  return dt;
+}
