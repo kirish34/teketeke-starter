@@ -39,25 +39,17 @@
 
     <div class="card">
       <h2>Register Matatu</h2>
-      <div class="muted">USSD code is allocated automatically after saving.</div>
+      <div class="muted">Till and USSD are captured automatically after saving.</div>
       <form onsubmit="return createMatatu(event)">
         <div class="row">
           <input id="plate" placeholder="Number plate (e.g., KDA 123A)" required />
           <input id="name" placeholder="Display name (optional)" />
         </div>
-        <input id="sacco" placeholder="SACCO name (optional)" />
-        <button>Create / Update</button>
-      </form>
-    </div>
-
-    <div class="card">
-      <h2>Assign Till</h2>
-      <form onsubmit="return assignTill(event)">
         <div class="row">
-          <input id="matatu_id_till" placeholder="Matatu ID" required />
           <input id="till" placeholder="Till number" required />
+          <input id="sacco" placeholder="SACCO name (optional)" />
         </div>
-        <button>Save Till</button>
+        <button>Create / Update</button>
       </form>
     </div>
 
@@ -126,12 +118,29 @@
 
     async function createMatatu(e){
       e.preventDefault();
-      const payload = { plate: $('plate').value, name: $('name').value, sacco_name: $('sacco').value };
+      const plate = $('plate').value.trim();
+      const name = $('name').value;
+      const sacco = $('sacco').value;
+      const tillNumber = $('till').value.trim();
+      if (!tillNumber) {
+        showToast('Till number is required');
+        return false;
+      }
+
+      const payload = { plate, name, sacco_name: sacco };
       const out = await api('/api/matatus', { method:'POST', body: JSON.stringify(payload) });
       const id = out.matatu.id;
-      $('matatu_id_till').value = id;
 
+      let tillSaved = null;
       let dial = null;
+
+      try {
+        await saveTill(id, tillNumber);
+        tillSaved = tillNumber;
+      } catch (err) {
+        console.error('Failed to save till', err);
+      }
+
       try {
         const alloc = await allocateUssd(id);
         dial = alloc && alloc.dial ? alloc.dial : null;
@@ -140,23 +149,21 @@
       }
 
       loadMatatus();
-      if (dial) {
-        showToast(`Saved • Dial ${dial}`);
-      } else {
-        showToast('Matatu saved');
-      }
+      $('plate').value = '';
+      $('name').value = '';
+      $('sacco').value = '';
+      $('till').value = '';
+
+      const parts = ['Saved'];
+      if (tillSaved) parts.push(`Till ${tillSaved}`);
+      if (dial) parts.push(`Dial ${dial}`);
+      showToast(parts.join(' • '));
       return false;
     }
 
-    async function assignTill(e){
-      e.preventDefault();
-      const id = $('matatu_id_till').value.trim();
-      const till_number = $('till').value.trim();
-      if(!id||!till_number) return false;
-      await api(`/api/matatus/${id}/till`, { method:'POST', body: JSON.stringify({ till_number }) });
-      showToast('Till updated');
-      loadMatatus();
-      return false;
+    async function saveTill(matatuId, till_number){
+      if(!matatuId || !till_number) throw new Error('Matatu ID and till are required');
+      return api(`/api/matatus/${matatuId}/till`, { method:'POST', body: JSON.stringify({ till_number }) });
     }
 
     async function allocateUssd(matatuId){
