@@ -3,93 +3,196 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>TekeTeke – Admin (Starter)</title>
+  <title>TekeTeke — Admin Console</title>
   <style>
-    :root{ --brand:#0ea5e9; --ink:#0b0b0c; --bg:#f6fbff; --panel:#fff; --muted:#6b7280; --ok:#065f46; --bad:#b91c1c; --border:#e5e7eb; }
-    *{box-sizing:border-box} body{margin:0;background:var(--bg);font-family:system-ui,Arial,sans-serif;color:var(--ink)}
-    header{background:var(--brand);color:#fff;padding:16px 20px;font-weight:700}
-    main{max-width:1000px;margin:24px auto;padding:0 16px}
-    .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;box-shadow:0 4px 16px rgba(2,132,199,.08)}
+    :root{
+      --brand:#0ea5e9; --ink:#0b0b0c; --bg:#f6fbff; --panel:#fff; --muted:#6b7280;
+      --ok:#065f46; --bad:#b91c1c; --border:#e5e7eb; --sidebar:#0b1220; --sidebarInk:#cbd5e1;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);font-family:system-ui,Arial,sans-serif;color:var(--ink);display:flex}
+    /* Layout */
+    .sidebar{width:240px;background:var(--sidebar);color:var(--sidebarInk);display:flex;flex-direction:column}
+    .brand{padding:16px 18px;border-bottom:1px solid #0f172a;font-weight:800;color:#fff}
+    .nav{padding:10px}
+    .nav button{width:100%;text-align:left;padding:10px 12px;border-radius:10px;border:1px solid transparent;background:transparent;color:var(--sidebarInk);cursor:pointer}
+    .nav button.active,.nav button:hover{background:#111827;color:#fff;border-color:#1f2937}
+    .content{flex:1;display:flex;flex-direction:column;min-width:0}
+    header{background:var(--panel);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;align-items:center;gap:12px;justify-content:space-between}
+    .header-right{display:flex;align-items:center;gap:8px}
+    main{max-width:1100px;margin:18px auto;padding:0 16px;width:100%}
+    /* Cards & forms */
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;box-shadow:0 4px 16px rgba(2,132,199,.06)}
     h2{margin:0 0 10px}
-    form{display:grid;gap:8px;margin-top:8px}
-    input,button{padding:10px 12px;border-radius:10px;border:1px solid var(--border)}
-    button{background:var(--brand);color:#fff;border:none;font-weight:600;cursor:pointer}
-    .secondary{background:#111827;color:#fff}
-    table{width:100%;border-collapse:collapse}
-    th,td{padding:8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle}
-    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
     .muted{color:var(--muted)}
-    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#e0f2fe;color:#075985;font-size:.85rem}
+    form{display:grid;gap:10px;margin-top:8px}
+    .row{display:grid;gap:12px}
+    @media(min-width:720px){ .row{grid-template-columns:1fr 1fr} }
+    input,select,button{padding:10px 12px;border-radius:10px;border:1px solid var(--border)}
+    button.primary{background:var(--brand);color:#fff;border:none;font-weight:600;cursor:pointer}
+    button.secondary{background:#111827;color:#fff;border:none;cursor:pointer}
+    .actions{display:flex;gap:8px;flex-wrap:wrap}
+    .danger{background:#b91c1c;color:#fff;border:none}
+    /* Tables */
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle}
     .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
-    .copybtn{margin-left:8px;padding:6px 10px;border-radius:8px;background:#111827;color:#fff;border:none;cursor:pointer;font-size:.85rem}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#e0f2fe;color:#075985;font-size:.85rem}
+    /* Toast */
     .toast{position:fixed;right:16px;top:16px;background:#111827;color:#fff;padding:10px 14px;border-radius:12px;opacity:0;transition:opacity .2s, transform .2s;transform:translateY(-10px);z-index:1000}
     .toast.show{opacity:1;transform:translateY(0)}
-    .action-btn{border-radius:8px;background:var(--brand);color:#fff}
-    .actions{display:flex;gap:6px;flex-wrap:wrap}
-    .actions button{padding:6px 10px;font-size:.8rem;font-weight:500}
-    .actions button.secondary{background:#111827}
-    .actions button.danger{background:#b91c1c}
+    /* Sections */
+    .section{display:none}
+    .section.active{display:block}
+    .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+    .copybtn{margin-left:8px;padding:6px 10px;border-radius:8px;background:#111827;color:#fff;border:none;cursor:pointer;font-size:.85rem}
   </style>
 </head>
 <body>
-  <header>TekeTeke – Admin (Starter)</header>
-  <main>
-    <div class="card" id="session_card">
-      <div style="display:flex;align-items:center;justify-content:space-between">
-        <strong>Session</strong>
-        <button class="secondary" type="button" onclick="logout()">Logout</button>
+  <aside class="sidebar">
+    <div class="brand">TekeTeke Admin</div>
+    <div class="nav">
+      <button id="nav-register" class="active" onclick="showSection('register')">Register New Matatu</button>
+      <button id="nav-edit" onclick="showSection('edit')">Edit Existing Matatu</button>
+      <button id="nav-list" onclick="showSection('list')">Matatu List</button>
+      <button id="nav-trans" onclick="showSection('transactions')">Transactions</button>
+      <hr style="border:0;border-top:1px solid #1f2937;margin:10px 0">
+      <button id="nav-session" onclick="showSection('session')">Session</button>
+    </div>
+  </aside>
+
+  <div class="content">
+    <header>
+      <div><strong>Admin Console</strong> <span class="muted">• matatus only</span></div>
+      <div class="header-right">
+        <input id="admin_token" placeholder="ADMIN_TOKEN" style="min-width:260px">
+        <button class="secondary" type="button" onclick="saveToken()">Save</button>
       </div>
-    </div>
-    
+    </header>
 
-    <div class="card">
-      <h2>Register Matatu</h2>
-      <div class="muted">Till and USSD are captured automatically after saving.</div>
-      <form onsubmit="return createMatatu(event)">
-        <div class="row">
-          <input id="plate" placeholder="Number plate (e.g., KDA 123A)" required />
-          <input id="name" placeholder="Display name (optional)" />
+    <main>
+      <!-- Register -->
+      <section id="section-register" class="section active">
+        <div class="card">
+          <h2>Register New Matatu</h2>
+          <div class="muted">Plate + Till are required. USSD is allocated automatically.</div>
+          <form onsubmit="return createMatatu(event)">
+            <div class="row">
+              <input id="new_plate" placeholder="Number plate (e.g., KDA 123A)" required />
+              <input id="new_name" placeholder="Alias name (optional)" />
+            </div>
+            <div class="row">
+              <input id="new_till" placeholder="Till number" required />
+              <input id="new_sacco" placeholder="SACCO name (optional)" />
+            </div>
+            <button class="primary">Create / Update</button>
+          </form>
         </div>
-        <div class="row">
-          <input id="till" placeholder="Till number" required />
-          <input id="sacco" placeholder="SACCO name (optional)" />
+      </section>
+
+      <!-- Edit -->
+      <section id="section-edit" class="section">
+        <div class="card">
+          <h2>Edit Existing Matatu</h2>
+          <div class="toolbar">
+            <input id="edit_search" placeholder="Search by plate…">
+            <button class="secondary" type="button" onclick="searchMatatu()">Search</button>
+          </div>
+          <div id="edit_result" class="muted">Search to load a matatu…</div>
         </div>
-        <button>Create / Update</button>
-      </form>
-    </div>
+      </section>
 
-    <div class="card">
-      <h2>Matatus & Success Counts</h2>
-      <button class="secondary" onclick="loadMatatus()">Refresh List</button>
-      <div style="height:8px"></div>
-      <table id="tbl">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Plate</th>
-            <th>Till</th>
-            <th>USSD</th>
-            <th>Dial</th>
-            <th>Success</th>
-            <th>Last Tx</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
+      <!-- List -->
+      <section id="section-list" class="section">
+        <div class="card">
+          <div class="toolbar">
+            <h2 style="margin:0">Matatu List</h2>
+            <button class="secondary" type="button" onclick="loadMatatus()">Refresh</button>
+            <input id="list_filter" placeholder="Filter by plate…" oninput="filterList()">
+          </div>
+          <table id="tbl">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Plate</th>
+                <th>Till</th>
+                <th>USSD</th>
+                <th>Dial</th>
+                <th>Success</th>
+                <th>Last Tx</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
 
-  </main>
+      <!-- Transactions -->
+      <section id="section-transactions" class="section">
+        <div class="card">
+          <h2>Transactions</h2>
+          <div class="toolbar">
+            <input id="tx_plate" placeholder="Search by plate (optional)">
+            <button class="secondary" type="button" onclick="loadTransactions()">Load</button>
+          </div>
+          <div class="muted" id="tx_hint">
+            Backend endpoint for transactions is not implemented in the starter. Add <code>GET /api/transactions?matatu_id=&lt;uuid&gt;</code>
+            and we’ll render them here.
+          </div>
+          <table id="tx_tbl" style="display:none">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Plate</th>
+                <th>MSISDN</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Receipt</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
 
-  <div id="toast" class="toast">Copied!</div>
+      <!-- Session -->
+      <section id="section-session" class="section">
+        <div class="card">
+          <h2>Session</h2>
+          <div class="muted">Your ADMIN_TOKEN is stored locally and attached to all API calls as <span class="mono">x-admin-token</span>.</div>
+          <div class="actions" style="margin-top:8px">
+            <button class="secondary" type="button" onclick="clearToken()">Clear token</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast">Saved</div>
 
   <script>
-    // USSD root is fetched from backend config to avoid drift
-    let UI_USSD_ROOT = '123';
+    // config
+    const UI_USSD_ROOT = '123'; // display only (backend has its own USSD_ROOT)
     const $ = (id)=>document.getElementById(id);
 
-    
+    // token storage
+    function getAdminToken(){ return localStorage.getItem('tt_admin_token') || ''; }
+    function saveToken(){ localStorage.setItem('tt_admin_token', $('admin_token').value.trim()); showToast('Saved token'); }
+    function clearToken(){ localStorage.removeItem('tt_admin_token'); $('admin_token').value=''; showToast('Cleared'); }
 
+    // nav
+    function showSection(key){
+      const map = {register:'section-register', edit:'section-edit', list:'section-list', transactions:'section-transactions', session:'section-session'};
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      document.getElementById(map[key]).classList.add('active');
+      document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+      document.getElementById('nav-'+key.replace('transactions','trans')).classList.add('active');
+      if(key==='list') loadMatatus();
+    }
+
+    // toast
     function showToast(msg){
       const t = $('toast');
       t.textContent = msg || 'Done';
@@ -98,186 +201,168 @@
       window.__toast = setTimeout(()=> t.classList.remove('show'), 1200);
     }
 
+    // api helper
     async function api(path, opts={}){
       const headers = Object.assign({ 'content-type':'application/json' }, opts.headers||{});
+      const tok = getAdminToken(); if (tok) headers['x-admin-token'] = tok;
       const res = await fetch(path, Object.assign(opts, { headers }));
       const body = await res.json().catch(()=>({}));
       if (!res.ok) throw new Error(body.error || res.statusText);
       return body;
     }
 
-    async function ensureAuth(){
-      try {
-        const r = await fetch('/api/auth/me');
-        if (!r.ok) throw new Error('unauthorized');
-        return true;
-      } catch(_) {
-        window.location.href = '/login.html';
-        return false;
-      }
-    }
-
-    async function logout(){
-      try { await fetch('/api/auth/logout', { method: 'POST' }); } catch(_) {}
-      window.location.href = '/login.html';
-    }
-
+    // REGISTER
     async function createMatatu(e){
       e.preventDefault();
-      const plate = $('plate').value.trim();
-      const name = $('name').value;
-      const sacco = $('sacco').value;
-      const tillNumber = $('till').value.trim();
-      if (!tillNumber) {
-        showToast('Till number is required');
-        return false;
-      }
+      const plate = $('new_plate').value.trim();
+      const name = $('new_name').value.trim();
+      const sacco_name = $('new_sacco').value.trim();
+      const till = $('new_till').value.trim();
+      if(!plate || !till){ showToast('Plate & till required'); return false; }
 
-      const payload = { plate, name, sacco_name: sacco };
-      const out = await api('/api/matatus', { method:'POST', body: JSON.stringify(payload) });
+      const out = await api('/api/matatus', { method:'POST', body: JSON.stringify({ plate, name, sacco_name }) });
       const id = out.matatu.id;
 
-      let tillSaved = null;
-      let dial = null;
+      await api(`/api/matatus/${id}/till`, { method:'POST', body: JSON.stringify({ till_number: till }) });
+      const alloc = await api(`/api/matatus/${id}/ussd`, { method:'POST' });
 
-      try {
-        await saveTill(id, tillNumber);
-        tillSaved = tillNumber;
-      } catch (err) {
-        console.error('Failed to save till', err);
-      }
-
-      try {
-        const alloc = await allocateUssd(id);
-        dial = alloc && alloc.dial ? alloc.dial : null;
-      } catch (err) {
-        console.error('Failed to allocate USSD code', err);
-      }
-
+      showToast(`Saved • Till ${till} • ${alloc.dial}`);
+      $('new_plate').value = ''; $('new_name').value = ''; $('new_sacco').value = ''; $('new_till').value = '';
       await loadMatatus();
-      $('plate').value = '';
-      $('name').value = '';
-      $('sacco').value = '';
-      $('till').value = '';
-
-      const parts = ['Saved'];
-      if (tillSaved) parts.push(`Till ${tillSaved}`);
-      if (dial) parts.push(`Dial ${dial}`);
-      showToast(parts.join(' • '));
       return false;
     }
 
-    async function saveTill(matatuId, till_number){
-      if(!matatuId || !till_number) throw new Error('Matatu ID and till are required');
-      return api(`/api/matatus/${matatuId}/till`, { method:'POST', body: JSON.stringify({ till_number }) });
-    }
-
-    async function saveTill(matatuId, till_number){
-      if(!matatuId || !till_number) throw new Error('Matatu ID and till are required');
-      return api(`/api/matatus/${matatuId}/till`, { method:'POST', body: JSON.stringify({ till_number }) });
-    }
-
-    async function allocateUssd(matatuId){
-      if(!matatuId) return null;
-      return api(`/api/matatus/${matatuId}/ussd`, { method:'POST' });
-    }
-
-    function copyDialText(text){
-      if(!text) return;
-      navigator.clipboard.writeText(text).then(()=> showToast('Copied'));
-    }
-
+    // LIST
+    let _matatus = [];
     async function loadMatatus(){
       const out = await api('/api/matatus');
+      _matatus = out.items || [];
+      renderList(_matatus);
+    }
+    function filterList(){
+      const q = $('list_filter').value.trim().toUpperCase();
+      const list = !q ? _matatus : _matatus.filter(x => (x.plate||'').toUpperCase().includes(q));
+      renderList(list);
+    }
+    function renderList(items){
       const tbody = document.querySelector('#tbl tbody');
       tbody.innerHTML = '';
-
-      (out.items || []).forEach(x=>{
+      items.forEach(x=>{
         const tr = document.createElement('tr');
 
-        const tdId = document.createElement('td'); tdId.className='mono'; tdId.textContent = x.matatu_id || '';
-        const tdPlate = document.createElement('td'); tdPlate.className='mono'; tdPlate.textContent = x.plate || '';
-        const tdTill = document.createElement('td'); tdTill.className='mono'; tdTill.textContent = x.till_number || '';
-        const tdUssd = document.createElement('td'); tdUssd.className='mono'; tdUssd.textContent = x.ussd_code || '';
+        const tdId = cell(x.matatu_id, true);
+        const tdPlate = cell(x.plate, true);
+        const tdTill = cell(x.till_number, true);
+        const tdUssd = cell(x.ussd_code, true);
 
         const tdDial = document.createElement('td'); tdDial.className='mono';
         const dial = x.ussd_code ? (`*${UI_USSD_ROOT}*${x.ussd_code}#`) : '';
         if (dial) {
           const span = document.createElement('span'); span.textContent = dial;
           const btn = document.createElement('button'); btn.className='copybtn'; btn.type='button'; btn.textContent='Copy';
-          btn.addEventListener('click', ()=> copyDialText(dial));
-          tdDial.appendChild(span);
-          tdDial.appendChild(btn);
+          btn.addEventListener('click', ()=> navigator.clipboard.writeText(dial).then(()=>showToast('Copied')));
+          tdDial.appendChild(span); tdDial.appendChild(btn);
         }
 
         const tdSucc = document.createElement('td'); tdSucc.innerHTML = `<span class="pill">${x.total_success || 0}</span>`;
-        const tdLast = document.createElement('td'); tdLast.className='mono'; tdLast.textContent = x.last_tx_at || '';
+        const tdLast = cell(x.last_tx_at || '', true);
 
-        const tdActions = document.createElement('td'); tdActions.className='actions';
-        tdActions.appendChild(actionButton('Change Till', () => changeTill(x)));
-        tdActions.appendChild(actionButton('New USSD', () => reassignUssd(x), 'secondary'));
-        tdActions.appendChild(actionButton('Delete', () => deleteMatatu(x), 'danger'));
+        const tdActions = document.createElement('td');
+        const actions = document.createElement('div'); actions.className='actions';
+        const btnTill = document.createElement('button'); btnTill.className='secondary'; btnTill.textContent='Change Till';
+        btnTill.onclick = ()=> changeTill(x);
+        const btnUssd = document.createElement('button'); btnUssd.className='secondary'; btnUssd.textContent='New USSD';
+        btnUssd.onclick = ()=> reassignUssd(x.matatu_id, x.plate);
+        const btnDelete = document.createElement('button'); btnDelete.className='danger'; btnDelete.textContent='Delete';
+        btnDelete.onclick = ()=> deleteMatatu(x.matatu_id, x.plate);
+        actions.appendChild(btnTill); actions.appendChild(btnUssd); actions.appendChild(btnDelete);
+        tdActions.appendChild(actions);
 
-        tr.appendChild(tdId);
-        tr.appendChild(tdPlate);
-        tr.appendChild(tdTill);
-        tr.appendChild(tdUssd);
-        tr.appendChild(tdDial);
-        tr.appendChild(tdSucc);
-        tr.appendChild(tdLast);
-        tr.appendChild(tdActions);
-
+        tr.appendChild(tdId); tr.appendChild(tdPlate); tr.appendChild(tdTill); tr.appendChild(tdUssd);
+        tr.appendChild(tdDial); tr.appendChild(tdSucc); tr.appendChild(tdLast); tr.appendChild(tdActions);
         tbody.appendChild(tr);
       });
     }
-
-    function actionButton(label, handler, extraClass){
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.textContent = label;
-      btn.className = extraClass ? `action-btn ${extraClass}` : 'action-btn';
-      btn.addEventListener('click', handler);
-      return btn;
+    function cell(text, mono=false){ const td = document.createElement('td'); if(mono) td.className='mono'; td.textContent = text || ''; return td; }
+    async function changeTill(x){
+      const next = prompt(`Enter new till for ${x.plate}`, x.till_number || '');
+      if(next == null) return;
+      const t = next.trim(); if(!t || t === x.till_number) return;
+      await api(`/api/matatus/${x.matatu_id}/till`, { method:'POST', body: JSON.stringify({ till_number: t }) });
+      showToast('Till updated'); loadMatatus();
+    }
+    async function allocateUssd(matatuId){
+      return api(`/api/matatus/${matatuId}/ussd`, { method:'POST' });
     }
 
-    async function changeTill(matatu){
-      const current = matatu.till_number || '';
-      const next = prompt(`Enter new till for ${matatu.plate}`, current);
-      if (next == null) return;
-      const trimmed = next.trim();
-      if (!trimmed) return;
-      if (trimmed === current) return;
-      await saveTill(matatu.matatu_id, trimmed);
-      showToast('Till updated');
-      await loadMatatus();
-    }
-
-    async function reassignUssd(matatu){
-      if (!confirm(`Generate a new USSD code for ${matatu.plate}?`)) return;
-      const out = await api(`/api/matatus/${matatu.matatu_id}/ussd/reassign`, { method:'POST' });
+    async function reassignUssd(matatuId, plate){
+      if (!matatuId) return;
+      if (!confirm(`Assign a new USSD code for ${plate || 'this matatu'}?`)) return;
+      const out = await api(`/api/matatus/${matatuId}/ussd/reassign`, { method:'POST' });
       showToast(`New USSD ${out.dial}`);
       await loadMatatus();
     }
 
-    async function deleteMatatu(matatu){
-      if (!confirm(`Delete matatu ${matatu.plate || ''}? This cannot be undone.`)) return;
-      await api(`/api/matatus/${matatu.matatu_id}`, { method:'DELETE' });
+    async function deleteMatatu(matatuId, plate){
+      if (!matatuId) return;
+      if (!confirm(`Delete matatu ${plate || ''}? This cannot be undone.`)) return;
+      await api(`/api/matatus/${matatuId}`, { method:'DELETE' });
       showToast('Matatu deleted');
       await loadMatatus();
     }
 
-    async function fetchConfig(){
-      try {
-        const res = await fetch('/api/config');
-        const cfg = await res.json().catch(()=>({}));
-        if (cfg && cfg.ussd_root) UI_USSD_ROOT = String(cfg.ussd_root);
-      } catch(_){ /* ignore */ }
+    // EDIT
+    async function searchMatatu(){
+      const q = $('edit_search').value.trim().toUpperCase();
+      if(!q){ $('edit_result').innerHTML = '<span class="muted">Enter a plate.</span>'; return; }
+      const out = await api('/api/matatus');
+      const found = (out.items || []).find(x => (x.plate||'').toUpperCase() === q);
+      if(!found){ $('edit_result').innerHTML = 'No match.'; return; }
+      renderEdit(found);
+    }
+    function renderEdit(x){
+      const dial = x.ussd_code ? (`*${UI_USSD_ROOT}*${x.ussd_code}#`) : '';
+      $('edit_result').innerHTML = `
+        <div class="row" style="margin-bottom:8px">
+          <div class="card">
+            <div class="mono muted">Matatu ID</div>
+            <div class="mono">${x.matatu_id}</div>
+            <div class="mono muted" style="margin-top:8px">Plate</div>
+            <div class="mono">${x.plate || ''}</div>
+          </div>
+          <div class="card">
+            <div class="mono muted">Till Number</div>
+            <div class="mono" id="ed_till">${x.till_number || ''}</div>
+            <div class="mono muted" style="margin-top:8px">USSD Code</div>
+            <div class="mono">${x.ussd_code || ''} ${dial ? `• ${dial}` : ''}</div>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="secondary" type="button" onclick="editChangeTill('${x.matatu_id}','${x.plate||''}','${x.till_number||''}')">Edit Till</button>
+          <button class="secondary" type="button" onclick="reassignUssd('${x.matatu_id}','${x.plate||''}'); searchMatatu();">New USSD</button>
+          <button class="danger" type="button" onclick="deleteMatatu('${x.matatu_id}','${x.plate||''}'); $('edit_result').innerHTML='Deleted';">Delete</button>
+        </div>
+      `;
+    }
+    async function editChangeTill(id, plate, current){
+      const next = prompt(`Enter new till for ${plate}`, current || '');
+      if(next == null) return;
+      const t = next.trim(); if(!t || t === current) return;
+      await api(`/api/matatus/${id}/till`, { method:'POST', body: JSON.stringify({ till_number: t }) });
+      showToast('Till updated'); searchMatatu();
     }
 
-    // autoload
-    (async function init(){
-      if(!(await ensureAuth())) return;
-      await fetchConfig();
+    // TRANSACTIONS (placeholder)
+    async function loadTransactions(){
+      // TODO: implement when backend exposes GET /api/transactions (optionally ?matatu_id=)
+      $('tx_tbl').style.display = 'none';
+      $('tx_hint').style.display = 'block';
+      showToast('Add /api/transactions on server to enable this');
+    }
+
+    // init
+    (function init(){
+      $('admin_token').value = getAdminToken();
       loadMatatus();
     })();
   </script>
