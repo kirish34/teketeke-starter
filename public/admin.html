@@ -39,6 +39,7 @@
 
     <div class="card">
       <h2>Register Matatu</h2>
+      <div class="muted">USSD code is allocated automatically after saving.</div>
       <form onsubmit="return createMatatu(event)">
         <div class="row">
           <input id="plate" placeholder="Number plate (e.g., KDA 123A)" required />
@@ -50,20 +51,13 @@
     </div>
 
     <div class="card">
-      <h2>Assign Till & USSD</h2>
+      <h2>Assign Till</h2>
       <form onsubmit="return assignTill(event)">
         <div class="row">
           <input id="matatu_id_till" placeholder="Matatu ID" required />
           <input id="till" placeholder="Till number" required />
         </div>
         <button>Save Till</button>
-      </form>
-      <div style="height:8px"></div>
-      <form onsubmit="return assignUssd(event)">
-        <div class="row">
-          <input id="matatu_id_ussd" placeholder="Matatu ID" required />
-          <button>Allocate USSD Code</button>
-        </div>
       </form>
     </div>
 
@@ -87,16 +81,6 @@
       </table>
     </div>
 
-    <div class="card">
-      <h2>Simulator</h2>
-      <form onsubmit="return simTx(event)">
-        <div class="row">
-          <input id="sim_matatu" placeholder="Matatu ID" required />
-          <input id="sim_amount" placeholder="Amount (e.g., 50)" type="number" step="0.01" />
-        </div>
-        <button>Simulate Success</button>
-      </form>
-    </div>
   </main>
 
   <div id="toast" class="toast">Copied!</div>
@@ -144,11 +128,23 @@
       e.preventDefault();
       const payload = { plate: $('plate').value, name: $('name').value, sacco_name: $('sacco').value };
       const out = await api('/api/matatus', { method:'POST', body: JSON.stringify(payload) });
-      showToast('Matatu saved');
-      $('matatu_id_till').value = out.matatu.id;
-      $('matatu_id_ussd').value = out.matatu.id;
-      $('sim_matatu').value = out.matatu.id;
+      const id = out.matatu.id;
+      $('matatu_id_till').value = id;
+
+      let dial = null;
+      try {
+        const alloc = await allocateUssd(id);
+        dial = alloc && alloc.dial ? alloc.dial : null;
+      } catch (err) {
+        console.error('Failed to allocate USSD code', err);
+      }
+
       loadMatatus();
+      if (dial) {
+        showToast(`Saved • Dial ${dial}`);
+      } else {
+        showToast('Matatu saved');
+      }
       return false;
     }
 
@@ -163,13 +159,9 @@
       return false;
     }
 
-    async function assignUssd(e){
-      e.preventDefault();
-      const id = $('matatu_id_ussd').value.trim();
-      const out = await api(`/api/matatus/${id}/ussd`, { method:'POST' });
-      showToast('USSD allocated');
-      loadMatatus();
-      return false;
+    async function allocateUssd(matatuId){
+      if(!matatuId) return null;
+      return api(`/api/matatus/${matatuId}/ussd`, { method:'POST' });
     }
 
     function copyDialText(text){
@@ -213,16 +205,6 @@
 
         tbody.appendChild(tr);
       });
-    }
-
-    async function simTx(e){
-      e.preventDefault();
-      const matatu_id = $('sim_matatu').value.trim();
-      const amount = Number($('sim_amount').value || 50);
-      await api('/api/sim/tx', { method:'POST', body: JSON.stringify({ matatu_id, amount, success: true }) });
-      showToast('Simulated success');
-      loadMatatus();
-      return false;
     }
 
     async function fetchConfig(){
