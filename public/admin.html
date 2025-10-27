@@ -24,6 +24,11 @@
     .copybtn{margin-left:8px;padding:6px 10px;border-radius:8px;background:#111827;color:#fff;border:none;cursor:pointer;font-size:.85rem}
     .toast{position:fixed;right:16px;top:16px;background:#111827;color:#fff;padding:10px 14px;border-radius:12px;opacity:0;transition:opacity .2s, transform .2s;transform:translateY(-10px);z-index:1000}
     .toast.show{opacity:1;transform:translateY(0)}
+    .action-btn{border-radius:8px;background:var(--brand);color:#fff}
+    .actions{display:flex;gap:6px;flex-wrap:wrap}
+    .actions button{padding:6px 10px;font-size:.8rem;font-weight:500}
+    .actions button.secondary{background:#111827}
+    .actions button.danger{background:#b91c1c}
   </style>
 </head>
 <body>
@@ -67,6 +72,7 @@
             <th>Dial</th>
             <th>Success</th>
             <th>Last Tx</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -148,7 +154,7 @@
         console.error('Failed to allocate USSD code', err);
       }
 
-      loadMatatus();
+      await loadMatatus();
       $('plate').value = '';
       $('name').value = '';
       $('sacco').value = '';
@@ -159,6 +165,11 @@
       if (dial) parts.push(`Dial ${dial}`);
       showToast(parts.join(' • '));
       return false;
+    }
+
+    async function saveTill(matatuId, till_number){
+      if(!matatuId || !till_number) throw new Error('Matatu ID and till are required');
+      return api(`/api/matatus/${matatuId}/till`, { method:'POST', body: JSON.stringify({ till_number }) });
     }
 
     async function saveTill(matatuId, till_number){
@@ -202,6 +213,11 @@
         const tdSucc = document.createElement('td'); tdSucc.innerHTML = `<span class="pill">${x.total_success || 0}</span>`;
         const tdLast = document.createElement('td'); tdLast.className='mono'; tdLast.textContent = x.last_tx_at || '';
 
+        const tdActions = document.createElement('td'); tdActions.className='actions';
+        tdActions.appendChild(actionButton('Change Till', () => changeTill(x)));
+        tdActions.appendChild(actionButton('New USSD', () => reassignUssd(x), 'secondary'));
+        tdActions.appendChild(actionButton('Delete', () => deleteMatatu(x), 'danger'));
+
         tr.appendChild(tdId);
         tr.appendChild(tdPlate);
         tr.appendChild(tdTill);
@@ -209,9 +225,45 @@
         tr.appendChild(tdDial);
         tr.appendChild(tdSucc);
         tr.appendChild(tdLast);
+        tr.appendChild(tdActions);
 
         tbody.appendChild(tr);
       });
+    }
+
+    function actionButton(label, handler, extraClass){
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = label;
+      btn.className = extraClass ? `action-btn ${extraClass}` : 'action-btn';
+      btn.addEventListener('click', handler);
+      return btn;
+    }
+
+    async function changeTill(matatu){
+      const current = matatu.till_number || '';
+      const next = prompt(`Enter new till for ${matatu.plate}`, current);
+      if (next == null) return;
+      const trimmed = next.trim();
+      if (!trimmed) return;
+      if (trimmed === current) return;
+      await saveTill(matatu.matatu_id, trimmed);
+      showToast('Till updated');
+      await loadMatatus();
+    }
+
+    async function reassignUssd(matatu){
+      if (!confirm(`Generate a new USSD code for ${matatu.plate}?`)) return;
+      const out = await api(`/api/matatus/${matatu.matatu_id}/ussd/reassign`, { method:'POST' });
+      showToast(`New USSD ${out.dial}`);
+      await loadMatatus();
+    }
+
+    async function deleteMatatu(matatu){
+      if (!confirm(`Delete matatu ${matatu.plate || ''}? This cannot be undone.`)) return;
+      await api(`/api/matatus/${matatu.matatu_id}`, { method:'DELETE' });
+      showToast('Matatu deleted');
+      await loadMatatus();
     }
 
     async function fetchConfig(){

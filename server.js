@@ -361,6 +361,63 @@ app.post(
   })
 );
 
+app.post(
+  '/api/matatus/:id/ussd/reassign',
+  requireAdmin,
+  asApi(async (req) => {
+    const { id } = req.params;
+    const { data: current, error: currentErr } = await supabase
+      .from('matatus')
+      .select('ussd_code')
+      .eq('id', id)
+      .maybeSingle();
+    if (currentErr) throw currentErr;
+    if (!current) throw new Error('Matatu not found');
+
+    const nowIso = new Date().toISOString();
+
+    if (current.ussd_code) {
+      await supabase
+        .from('ussd_codes')
+        .update({ status: 'free', assigned_to: null, assigned_at: null })
+        .eq('code', current.ussd_code);
+    }
+
+    let freeQuery = supabase
+      .from('ussd_codes')
+      .select('code')
+      .eq('status', 'free')
+      .order('base', { ascending: true })
+      .limit(1);
+
+    if (current.ussd_code) {
+      freeQuery = freeQuery.neq('code', current.ussd_code);
+    }
+
+    const { data: next, error: nextErr } = await freeQuery.maybeSingle();
+    if (nextErr) throw nextErr;
+    if (!next) throw new Error('No free USSD codes available');
+
+    const { error: updateMatatuErr } = await supabase.from('matatus').update({ ussd_code: next.code }).eq('id', id);
+    if (updateMatatuErr) throw updateMatatuErr;
+
+    const { error: updatePoolErr } = await supabase
+      .from('ussd_codes')
+      .update({ status: 'assigned', assigned_to: id, assigned_at: nowIso })
+      .eq('code', next.code);
+    if (updatePoolErr) throw updatePoolErr;
+
+    const { data: mat, error: viewErr } = await supabase
+      .from('v_matatu_stats')
+      .select('*')
+      .eq('matatu_id', id)
+      .maybeSingle();
+    if (viewErr) throw viewErr;
+
+    return { matatu: mat, dial: `*${USSD_ROOT}*${next.code}#` };
+  })
+);
+
 app.get(
   '/api/ussd/validate/:code',
   requireAdmin,
@@ -443,6 +500,33 @@ app.post(
   })
 );
 
+app.delete(
+  '/api/matatus/:id',
+  requireAdmin,
+  asApi(async (req) => {
+    const { id } = req.params;
+    const { data: current, error: currentErr } = await supabase
+      .from('matatus')
+      .select('ussd_code')
+      .eq('id', id)
+      .maybeSingle();
+    if (currentErr) throw currentErr;
+    if (!current) return { deleted: false };
+
+    if (current.ussd_code) {
+      await supabase
+        .from('ussd_codes')
+        .update({ status: 'free', assigned_to: null, assigned_at: null })
+        .eq('code', current.ussd_code);
+    }
+
+    const { error: deleteErr } = await supabase.from('matatus').delete().eq('id', id);
+    if (deleteErr) throw deleteErr;
+
+    return { deleted: true };
+  })
+);
+
 // ---- UI routes ----
 function serveAdmin(req, res) {
   const sess = getSession(req);
@@ -469,4 +553,3 @@ if (require.main === module) {
 } else {
   module.exports = app;
 }
-
