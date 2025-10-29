@@ -34,9 +34,10 @@ Paste values either in `.env` (local) or the Vercel dashboard (Production/Previe
 - `SESSION_SECRET` — Secret to sign admin session cookie.
 - `ALLOWED_ORIGINS` — Comma-separated list of allowed origins (e.g., `https://your-admin.vercel.app,https://ops.example.com`).
 - `USSD_ROOT` — The USSD root code prefix shown to users (default `123`).
-- `CALLBACK_SECRET` — Shared secret used to HMAC-sign the raw JSON body for `/api/mpesa/callback`.
-- `PORT` — Local dev port (default `5001`).
-- `NODE_ENV` — `development` or `production`.
+- `CALLBACK_SECRET` - Shared secret used to HMAC-sign the raw JSON body for `/api/mpesa/callback`.
+- `OPS_WEBHOOK_URL` - Slack (or similar) webhook URL for operational alerts.
+- `PORT` - Local dev port (default `5001`).
+- `NODE_ENV` - `development` or `production`.
 
 ## M-Pesa Callback Authentication
 

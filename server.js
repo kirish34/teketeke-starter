@@ -11,6 +11,7 @@ const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
 const { createClient } = require('@supabase/supabase-js');
+const pkg = require('./package.json');
 
 // ---- Env ----
 const {
@@ -21,8 +22,14 @@ const {
   USSD_ROOT = '123', // results in *123*<ussd_code># for display/return
   ALLOWED_ORIGINS = '',
   CALLBACK_SECRET,
-  SESSION_SECRET
+  SESSION_SECRET,
+  OPS_WEBHOOK_URL,
+  RATE_LIMIT_CALLBACK_MAX = '60',
+  RATE_LIMIT_CALLBACK_WINDOW_MS = String(60 * 1000),
+  HEALTHCHECK_SKIP_DB = 'false'
 } = process.env;
+const APP_NAME = pkg.name || 'teketeke-starter';
+const APP_VERSION = pkg.version || '0.0.0';
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE) {
   console.warn('[WARN] Ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE are set in environment');
@@ -34,6 +41,25 @@ if (!SESSION_SECRET || !(process.env.ADMIN_USER && process.env.ADMIN_PASSWORD)) 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
   auth: { autoRefreshToken: false, persistSession: false }
 });
+
+async function notifyOps(event, payload = {}) {
+  if (!OPS_WEBHOOK_URL) return;
+  try {
+    await fetch(OPS_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        event,
+        app: APP_NAME,
+        version: APP_VERSION,
+        timestamp: new Date().toISOString(),
+        payload
+      })
+    });
+  } catch (err) {
+    console.error('[notifyOps] failed', err);
+  }
+}
 
 const app = express();
 app.set('trust proxy', true);
@@ -57,16 +83,13 @@ app.use(cors(corsOptions));
 
 app.use(compression());
 
-// Capture raw body for HMAC verification on callbacks
+// keep the raw bytes for HMAC verification
 app.use(
   express.json({
-    limit: '100kb',
+    type: 'application/json',
+    limit: '1mb',
     verify: (req, res, buf) => {
-      try {
-        req.rawBody = buf.toString('utf8');
-      } catch (_) {
-        req.rawBody = '';
-      }
+      req.rawBody = buf.toString('utf8');
     }
   })
 );
@@ -160,7 +183,28 @@ const asApi = (fn) => async (req, res) => {
     if (!res.headersSent) res.json(data);
   } catch (err) {
     console.error(err);
-    if (!res.headersSent) res.status(500).json({ error: err.message || 'internal_error' });
+    const code = err && typeof err === 'object' ? err.code || err.status || err.statusCode : null;
+    notifyOps('api_error', {
+      path: req.originalUrl,
+      method: req.method,
+      code,
+      message: err && err.message ? err.message : String(err)
+    });
+    if (res.headersSent) return;
+    if (code === '23505') {
+      return res
+        .status(409)
+        .json({ error: 'duplicate', message: err.message || 'duplicate key', details: err.details || null });
+    }
+    if (code === '23503') {
+      return res
+        .status(400)
+        .json({ error: 'invalid_reference', message: err.message || 'invalid reference', details: err.details || null });
+    }
+    if (typeof code === 'number' && code >= 400 && code < 600) {
+      return res.status(code).json({ error: err.message || 'error' });
+    }
+    res.status(500).json({ error: err.message || 'internal_error' });
   }
 };
 
@@ -219,7 +263,7 @@ function getTodayBounds() {
 }
 
 // ---- Simple in-memory rate limiter ----
-function createRateLimiter({ windowMs, max, keyGenerator }) {
+function createRateLimiter({ windowMs, max, keyGenerator, name = 'rateLimiter' }) {
   const store = new Map();
   return function rateLimiter(req, res, next) {
     const now = Date.now();
@@ -233,6 +277,13 @@ function createRateLimiter({ windowMs, max, keyGenerator }) {
     if (entry.count > max) {
       const retryAfter = Math.max(1, Math.ceil((entry.start + windowMs - now) / 1000));
       res.set('Retry-After', String(retryAfter));
+      notifyOps('rate_limited', {
+        limiter: name,
+        key,
+        retry_after: retryAfter,
+        ip: req.ip,
+        path: req.originalUrl
+      });
       return res.status(429).json({ error: 'rate_limited' });
     }
     next();
@@ -246,9 +297,10 @@ const adminLimiter = createRateLimiter({
 });
 
 const callbackLimiter = createRateLimiter({
-  windowMs: 60 * 1000, // 1 minute
-  max: 60,
-  keyGenerator: (req) => req.ip
+  windowMs: Number(RATE_LIMIT_CALLBACK_WINDOW_MS) || 60 * 1000,
+  max: Number(RATE_LIMIT_CALLBACK_MAX) || 60,
+  keyGenerator: (req) => req.ip,
+  name: 'callback'
 });
 
 const loginLimiter = createRateLimiter({
@@ -284,7 +336,38 @@ app.use(['/api/matatus', '/api/ussd', '/api/sim'], adminLimiter);
 
 // ---- Health ----
 app.get('/ping', (req, res) => res.json({ ok: true }));
-app.get('/__version', (req, res) => res.json({ name: 'teketeke-starter', version: '0.4.0' }));
+app.get('/__version', (req, res) => res.json({ name: APP_NAME, version: APP_VERSION }));
+
+app.get('/healthz', async (req, res) => {
+  const started = Date.now();
+  const result = {
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    version: APP_VERSION,
+    checks: {}
+  };
+  let statusCode = 200;
+
+  if (HEALTHCHECK_SKIP_DB === 'true' || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE) {
+    result.checks.supabase = { status: 'skipped' };
+  } else {
+    const dbStart = Date.now();
+    try {
+      const { error } = await supabase.from('transactions').select('id', { head: true }).limit(1);
+      if (error) throw error;
+      result.checks.supabase = { status: 'ok', latency_ms: Date.now() - dbStart };
+    } catch (err) {
+      statusCode = 503;
+      result.status = 'degraded';
+      result.checks.supabase = { status: 'error', latency_ms: Date.now() - dbStart, error: err.message };
+      notifyOps('healthcheck_supabase_error', { message: err.message });
+    }
+  }
+
+  result.duration_ms = Date.now() - started;
+  res.status(statusCode).json(result);
+});
 
 // ---- Public config ----
 app.get('/api/config', (req, res) => {
@@ -682,10 +765,24 @@ function serveLogin(req, res) {
 }
 app.get(['/login', '/login.html', '/api/login'], serveLogin);
 
+app.use((err, req, res, next) => {
+  console.error('[unhandled]', err);
+  notifyOps('unhandled_error', {
+    path: req.originalUrl,
+    method: req.method,
+    message: err && err.message ? err.message : String(err)
+  });
+  res.status(500).json({ error: 'internal_error', message: err.message });
+});
+
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`[teketeke] listening on http://localhost:${PORT}`);
   });
-} else {
-  module.exports = app;
 }
+
+module.exports = app;
+module.exports.createRateLimiter = createRateLimiter;
+module.exports.verifyCallbackSignature = verifyCallbackSignature;
+module.exports.notifyOps = notifyOps;
+module.exports.APP_VERSION = APP_VERSION;
