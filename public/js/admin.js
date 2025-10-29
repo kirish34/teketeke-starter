@@ -149,6 +149,17 @@ function filterList(){
 function renderList(items){
   const tbody = document.querySelector('#tbl tbody');
   tbody.innerHTML = '';
+  const totalEl = $('list_total');
+  if (totalEl) {
+    const overall = Array.isArray(_matatus) ? _matatus.length : 0;
+    if (overall === 0) {
+      totalEl.textContent = 'Total: 0';
+    } else if (items.length === overall) {
+      totalEl.textContent = `Total: ${formatNumber(overall)}`;
+    } else {
+      totalEl.textContent = `Showing ${formatNumber(items.length)} of ${formatNumber(overall)}`;
+    }
+  }
   items.forEach(x=>{
     const tr = document.createElement('tr');
     tr.dataset.matatuId = x.matatu_id || '';
