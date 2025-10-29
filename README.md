@@ -33,9 +33,11 @@ Paste values either in `.env` (local) or the Vercel dashboard (Production/Previe
 - `ADMIN_PASSWORD` — Admin password for login.
 - `SESSION_SECRET` — Secret to sign admin session cookie.
 - `ALLOWED_ORIGINS` — Comma-separated list of allowed origins (e.g., `https://your-admin.vercel.app,https://ops.example.com`).
-- `USSD_ROOT` — The USSD root code prefix shown to users (default `123`).
+- `USSD_ROOT` – The USSD root code prefix shown to users (default `123`).
 - `CALLBACK_SECRET` - Shared secret used to HMAC-sign the raw JSON body for `/api/mpesa/callback`.
 - `OPS_WEBHOOK_URL` - Slack (or similar) webhook URL for operational alerts.
+- `USSD_GATEWAY_SECRET` - Shared HMAC secret for authenticating `/ussd` callbacks (if your provider signs calls).
+- `RATE_LIMIT_USSD_MAX` - Requests per minute allowed from the USSD gateway (default `90`).
 - `PORT` - Local dev port (default `5001`).
 - `NODE_ENV` - `development` or `production`.
 
@@ -65,10 +67,11 @@ If signature is missing or invalid, the server returns `401`.
   - `POST /api/matatus/:id/till` — Set till number.
   - `POST /api/matatus/:id/ussd` — Allocate next USSD.
   - `GET /api/matatus` — List with success counts.
-  - `GET /api/matatus/:id` — Single summary.
-  - `GET /api/ussd/validate/:code` — Validate a code.
-  - `POST /api/sim/tx` — Simulate a successful transaction.
-- `POST /api/mpesa/callback` — Ingest a transaction (requires `x-callback-signature`).
+- `GET /api/matatus/:id` – Single summary.
+- `GET /api/ussd/validate/:code` – Validate a code.
+- `POST /api/sim/tx` – Simulate a successful transaction.
+- `POST /ussd` – Public USSD webhook entry point (expects Safaricom/aggregator payloads; returns `CON/END` responses).
+- `POST /api/mpesa/callback` – Ingest a transaction (requires `x-callback-signature`).
 
 ## Notes
 

@@ -26,7 +26,9 @@ const {
   OPS_WEBHOOK_URL,
   RATE_LIMIT_CALLBACK_MAX = '60',
   RATE_LIMIT_CALLBACK_WINDOW_MS = String(60 * 1000),
-  HEALTHCHECK_SKIP_DB = 'false'
+  RATE_LIMIT_USSD_MAX = '90',
+  HEALTHCHECK_SKIP_DB = 'false',
+  USSD_GATEWAY_SECRET
 } = process.env;
 const APP_NAME = pkg.name || 'teketeke-starter';
 const APP_VERSION = pkg.version || '0.0.0';
@@ -90,6 +92,17 @@ app.use(
     limit: '1mb',
     verify: (req, res, buf) => {
       req.rawBody = buf.toString('utf8');
+    }
+  })
+);
+app.use(
+  express.urlencoded({
+    extended: false,
+    limit: '1mb',
+    verify: (req, res, buf) => {
+      if (!req.rawBody && buf && buf.length) {
+        req.rawBody = buf.toString('utf8');
+      }
     }
   })
 );
@@ -208,6 +221,171 @@ const asApi = (fn) => async (req, res) => {
   }
 };
 
+const sendUssdResponse = (res, type, message) => {
+  const sanitizedType = type === 'END' ? 'END' : 'CON';
+  const text = `${sanitizedType} ${message || ''}`.trim();
+  res.set('Content-Type', 'text/plain; charset=utf-8');
+  res.status(200).send(text);
+};
+
+const asUssd = (fn) => async (req, res) => {
+  try {
+    const payload = await fn(req, res);
+    if (res.headersSent) return;
+    if (!payload || typeof payload !== 'object') throw new Error('Invalid USSD payload');
+    sendUssdResponse(res, payload.type, payload.message);
+  } catch (err) {
+    console.error('[ussd]', err);
+    notifyOps('ussd_error', {
+      path: req.originalUrl,
+      method: req.method,
+      message: err && err.message ? err.message : String(err)
+    });
+    if (!res.headersSent) {
+      sendUssdResponse(res, 'END', 'Service temporarily unavailable. Please try again later.');
+    }
+  }
+};
+
+function extractUssdPayload(req) {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const pick = (keys) => {
+    for (const key of keys) {
+      if (body[key] != null && body[key] !== '') return body[key];
+    }
+    return null;
+  };
+  const textValue = pick(['text', 'Text', 'userInput', 'input', 'message']) || '';
+  return {
+    sessionId: pick(['sessionId', 'session_id', 'SessionId', 'sessionID']),
+    phoneNumber: pick(['phoneNumber', 'PhoneNumber', 'msisdn', 'Msisdn', 'MSISDN', 'phone']),
+    serviceCode: pick(['serviceCode', 'service_code', 'ServiceCode']),
+    operator: pick(['operator', 'Operator']),
+    text: typeof textValue === 'string' ? textValue : ''
+  };
+}
+
+function parseUssdSegments(text) {
+  if (!text) return [];
+  const raw = String(text);
+  if (raw.trim() === '') return [];
+  const parts = raw.split('*');
+  while (parts.length && parts[parts.length - 1] === '') {
+    parts.pop();
+  }
+  return parts;
+}
+
+function sanitizePlateInput(input) {
+  if (input == null) return null;
+  const raw = String(input).trim().toUpperCase();
+  if (!raw) return null;
+  const normalized = raw.replace(/[^A-Z0-9]/g, '');
+  if (!normalized) return null;
+  return { raw, normalized };
+}
+
+function formatUssdDate(iso) {
+  if (!iso) return null;
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return null;
+  const day = dt.toLocaleDateString('en-KE', { day: '2-digit', month: '2-digit' });
+  const time = dt.toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit', hour12: false });
+  return `${day} ${time}`;
+}
+
+async function lookupMatatuSummary(plateInput, supabaseClient) {
+  const sanitized = sanitizePlateInput(plateInput);
+  if (!sanitized) {
+    return { ok: false, reason: 'invalid' };
+  }
+  const columns = 'matatu_id, plate, till_number, ussd_code, total_success, total_failed, last_tx_at';
+  const baseBuilder = supabaseClient
+    .from('v_matatu_stats')
+    .select(columns)
+    .filter("replace(upper(plate),' ','')", 'eq', sanitized.normalized);
+  const primary = await baseBuilder.maybeSingle();
+  if (primary.error) throw primary.error;
+  if (primary.data) {
+    return { ok: true, matatu: primary.data, sanitized };
+  }
+
+  const wildcard = `%${sanitized.normalized.split('').join('%')}%`;
+  const fallbackBuilder = supabaseClient.from('v_matatu_stats').select(columns).ilike('plate', wildcard).limit(1);
+  const fallback = await fallbackBuilder.maybeSingle();
+  if (fallback.error) throw fallback.error;
+  if (fallback.data) {
+    return { ok: true, matatu: fallback.data, sanitized };
+  }
+  return { ok: false, reason: 'not_found', sanitized };
+}
+
+const USSD_ROOT_MESSAGE = [
+  'Karibu TekeTeke.',
+  '1. Angalia matatu.',
+  '2. Msaada.',
+  '0. Ondoka.'
+].join('\n');
+
+const USSD_SUPPORT_MESSAGE = 'Msaada: piga 0800-123-456 au barua support@teketeke.dev';
+
+async function handleUssdFlow(payload, supabaseClient) {
+  const segments = parseUssdSegments(payload.text);
+  const action = segments[0] || '';
+  if (!action) {
+    return { type: 'CON', message: USSD_ROOT_MESSAGE };
+  }
+
+  if (action === '0') {
+    return { type: 'END', message: 'Asante kwa kutumia TekeTeke.' };
+  }
+
+  if (action === '2') {
+    return { type: 'END', message: USSD_SUPPORT_MESSAGE };
+  }
+
+  if (action === '1') {
+    if (segments.length === 1) {
+      return { type: 'CON', message: 'Ingiza nambari ya plate (mfano KDA123A).' };
+    }
+    const lookup = await lookupMatatuSummary(segments[1], supabaseClient);
+    if (lookup.ok && lookup.matatu) {
+      const m = lookup.matatu;
+      const dial = m.ussd_code ? `*${USSD_ROOT}*${m.ussd_code}#` : 'haijatengwa';
+      const successCount = Number(m.total_success || 0);
+      const successDisplay = Number.isFinite(successCount) ? successCount.toLocaleString('en-KE') : '0';
+      const lines = [
+        m.plate || lookup.sanitized.raw,
+        `Till: ${m.till_number || 'haijawekwa'}`,
+        `USSD: ${dial}`,
+        `Mafanikio: ${successDisplay}`
+      ];
+      const lastTx = formatUssdDate(m.last_tx_at);
+      if (lastTx) lines.push(`Last tx: ${lastTx}`);
+      notifyOps('ussd_lookup', {
+        plate: lookup.sanitized.normalized,
+        found: true,
+        msisdn_suffix: payload.phoneNumber ? String(payload.phoneNumber).slice(-4) : null
+      });
+      return { type: 'END', message: lines.join('\n') };
+    }
+    if (lookup.reason === 'invalid') {
+      return { type: 'CON', message: 'Plate si sahihi. Tafadhali jaribu tena:' };
+    }
+    notifyOps('ussd_lookup', {
+      plate: lookup.sanitized ? lookup.sanitized.normalized : null,
+      found: false,
+      msisdn_suffix: payload.phoneNumber ? String(payload.phoneNumber).slice(-4) : null
+    });
+    return { type: 'END', message: 'Hatukupata matatu hiyo. Hakikisha plate ni sahihi.' };
+  }
+
+  return {
+    type: 'CON',
+    message: ['Chaguo si sahihi.', '1. Angalia matatu.', '2. Msaada.', '0. Ondoka.'].join('\n')
+  };
+}
+
 function digitalRootOfSumDigits(base3) {
   // base3 is "001".."999"
   const a = Number(base3[0]),
@@ -290,6 +468,23 @@ function createRateLimiter({ windowMs, max, keyGenerator, name = 'rateLimiter' }
   };
 }
 
+const ussdLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: Number(RATE_LIMIT_USSD_MAX) || 90,
+  keyGenerator: (req) => {
+    const body = req.body || {};
+    const key =
+      body.phoneNumber ||
+      body.PhoneNumber ||
+      body.msisdn ||
+      body.Msisdn ||
+      body.sessionId ||
+      body.session_id;
+    return key || req.ip;
+  },
+  name: 'ussd'
+});
+
 const adminLimiter = createRateLimiter({
   windowMs: 10 * 60 * 1000, // 10 minutes
   max: 300,
@@ -331,8 +526,56 @@ function requireCallbackSignature(req, res, next) {
   next();
 }
 
+function verifyUssdSignature(req) {
+  if (!USSD_GATEWAY_SECRET) return true;
+  try {
+    const provided = String(req.headers['x-ussd-signature'] || '');
+    if (!provided) return false;
+    const raw =
+      typeof req.rawBody === 'string'
+        ? req.rawBody
+        : JSON.stringify(req.body && typeof req.body === 'object' ? req.body : {});
+    const computed = crypto.createHmac('sha256', USSD_GATEWAY_SECRET).update(raw).digest('hex');
+    let providedBuf;
+    try {
+      providedBuf = Buffer.from(provided, 'hex');
+    } catch (_) {
+      providedBuf = Buffer.from(provided, 'utf8');
+    }
+    const computedBuf = Buffer.from(computed, 'hex');
+    if (providedBuf.length !== computedBuf.length) return false;
+    return crypto.timingSafeEqual(providedBuf, computedBuf);
+  } catch (_) {
+    return false;
+  }
+}
+
+function requireUssdSignature(req, res, next) {
+  if (!USSD_GATEWAY_SECRET) return next();
+  if (verifyUssdSignature(req)) return next();
+  notifyOps('ussd_signature_invalid', {
+    path: req.originalUrl,
+    session: req.body && (req.body.sessionId || req.body.session_id),
+    msisdn_suffix: req.body && req.body.phoneNumber ? String(req.body.phoneNumber).slice(-4) : null
+  });
+  if (!res.headersSent) {
+    sendUssdResponse(res, 'END', 'Huduma haikupatikana. (usumbufu wa uhalalishaji)');
+  }
+}
+
 // Apply admin rate limiting to admin route prefixes
 app.use(['/api/matatus', '/api/ussd', '/api/sim'], adminLimiter);
+
+app.post(
+  '/ussd',
+  ussdLimiter,
+  requireUssdSignature,
+  asUssd(async (req) => {
+    const payload = extractUssdPayload(req);
+    const supabaseClient = (req.app && req.app.locals && req.app.locals.supabase) || supabase;
+    return handleUssdFlow(payload, supabaseClient);
+  })
+);
 
 // ---- Health ----
 app.get('/ping', (req, res) => res.json({ ok: true }));
