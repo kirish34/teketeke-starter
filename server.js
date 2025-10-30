@@ -1,5 +1,5 @@
-// server.js — TekeTeke Starter (Matatus + Tills + USSD + Success Counts)
-// USSD code format: ABCX (A,B,C are 3-digit base 001–999; X = digital root of A+B+C)
+﻿// server.js â€” TekeTeke Starter (Matatus + Tills + USSD + Success Counts)
+// USSD code format: ABCX (A,B,C are 3-digit base 001â€“999; X = digital root of A+B+C)
 // Examples: 0011, 0022, 1236 (1+2+3=6), 9999 (9+9+9=27 -> 2+7=9)
 
 require('dotenv').config();
@@ -32,6 +32,17 @@ const {
 } = process.env;
 const APP_NAME = pkg.name || 'teketeke-starter';
 const APP_VERSION = pkg.version || '0.0.0';
+const CSP_DIRECTIVES = {
+  defaultSrc: ["'self'"],
+  scriptSrc: ["'self'"],
+  connectSrc: ["'self'"],
+  imgSrc: ["'self'", 'data:'],
+  styleSrc: ["'self'", "'unsafe-inline'"],
+  fontSrc: ["'self'", 'data:'],
+  baseUri: ["'self'"],
+  formAction: ["'self'"],
+  frameAncestors: ["'self'"]
+};
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE) {
   console.warn('[WARN] Ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE are set in environment');
@@ -43,6 +54,10 @@ if (!SESSION_SECRET || !(process.env.ADMIN_USER && process.env.ADMIN_PASSWORD)) 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
   auth: { autoRefreshToken: false, persistSession: false }
 });
+
+function resolveSupabase(req) {
+  return (req && req.app && req.app.locals && req.app.locals.supabase) || supabase;
+}
 
 async function notifyOps(event, payload = {}) {
   if (!OPS_WEBHOOK_URL) return;
@@ -65,7 +80,30 @@ async function notifyOps(event, payload = {}) {
 
 const app = express();
 app.set('trust proxy', true);
-app.use(helmet());
+
+const assignRequestId = (req, res, next) => {
+  const header = typeof req.headers['x-request-id'] === 'string' ? req.headers['x-request-id'] : '';
+  const sanitized = /^[A-Za-z0-9._-]{3,64}$/.test(header) ? header : crypto.randomUUID();
+  req.requestId = sanitized;
+  res.locals.requestId = sanitized;
+  res.setHeader('X-Request-ID', sanitized);
+  next();
+};
+
+morgan.token('id', (req) => req.requestId || '-');
+
+const morganFormat =
+  NODE_ENV === 'production'
+    ? ':remote-addr - :remote-user [:date[iso]] ":method :url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent" req_id=:id :response-time ms'
+    : ':method :url :status req_id=:id - :response-time ms';
+
+app.use(assignRequestId);
+app.use(
+  helmet({
+    contentSecurityPolicy: { directives: CSP_DIRECTIVES },
+    crossOriginEmbedderPolicy: false
+  })
+);
 
 // CORS restriction: allow list in production; permissive in dev if unset
 const allowed = (ALLOWED_ORIGINS || '')
@@ -106,7 +144,7 @@ app.use(
     }
   })
 );
-app.use(morgan(NODE_ENV === 'production' ? 'combined' : 'dev'));
+app.use(morgan(morganFormat));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ---- Admin gate helpers ----
@@ -191,6 +229,7 @@ function requireAdmin(req, res, next) {
 
 // ---- Helpers ----
 const asApi = (fn) => async (req, res) => {
+  const requestId = req.requestId || null;
   try {
     const data = await fn(req, res);
     if (!res.headersSent) res.json(data);
@@ -201,23 +240,34 @@ const asApi = (fn) => async (req, res) => {
       path: req.originalUrl,
       method: req.method,
       code,
-      message: err && err.message ? err.message : String(err)
+      message: err && err.message ? err.message : String(err),
+      request_id: requestId
     });
     if (res.headersSent) return;
     if (code === '23505') {
       return res
         .status(409)
-        .json({ error: 'duplicate', message: err.message || 'duplicate key', details: err.details || null });
+        .json({
+          error: 'duplicate',
+          message: err.message || 'duplicate key',
+          details: err.details || null,
+          request_id: requestId
+        });
     }
     if (code === '23503') {
       return res
         .status(400)
-        .json({ error: 'invalid_reference', message: err.message || 'invalid reference', details: err.details || null });
+        .json({
+          error: 'invalid_reference',
+          message: err.message || 'invalid reference',
+          details: err.details || null,
+          request_id: requestId
+        });
     }
     if (typeof code === 'number' && code >= 400 && code < 600) {
-      return res.status(code).json({ error: err.message || 'error' });
+      return res.status(code).json({ error: err.message || 'error', request_id: requestId });
     }
-    res.status(500).json({ error: err.message || 'internal_error' });
+    res.status(500).json({ error: err.message || 'internal_error', request_id: requestId });
   }
 };
 
@@ -229,6 +279,7 @@ const sendUssdResponse = (res, type, message) => {
 };
 
 const asUssd = (fn) => async (req, res) => {
+  const requestId = req.requestId || null;
   try {
     const payload = await fn(req, res);
     if (res.headersSent) return;
@@ -239,7 +290,8 @@ const asUssd = (fn) => async (req, res) => {
     notifyOps('ussd_error', {
       path: req.originalUrl,
       method: req.method,
-      message: err && err.message ? err.message : String(err)
+      message: err && err.message ? err.message : String(err),
+      request_id: requestId
     });
     if (!res.headersSent) {
       sendUssdResponse(res, 'END', 'Service temporarily unavailable. Please try again later.');
@@ -283,6 +335,26 @@ function sanitizePlateInput(input) {
   const normalized = raw.replace(/[^A-Z0-9]/g, '');
   if (!normalized) return null;
   return { raw, normalized };
+}
+
+function createHttpError(message, status = 400, details = null) {
+  const err = new Error(message);
+  err.status = status;
+  if (details) err.details = details;
+  return err;
+}
+
+function ensureValidPlate(value) {
+  const sanitized = sanitizePlateInput(value);
+  if (!sanitized) throw createHttpError('invalid_plate', 400);
+  if (!/^[A-Z]{3}\d{3}[A-Z]$/.test(sanitized.normalized)) throw createHttpError('invalid_plate', 400);
+  return sanitized.raw.replace(/\s+/g, ' ').trim();
+}
+
+function ensureValidTill(value) {
+  const trimmed = String(value || '').trim();
+  if (!/^\d{4,12}$/.test(trimmed)) throw createHttpError('invalid_till', 400);
+  return trimmed;
 }
 
 function formatUssdDate(iso) {
@@ -329,7 +401,7 @@ const USSD_ROOT_MESSAGE = [
 
 const USSD_SUPPORT_MESSAGE = 'Msaada: piga 0800-123-456 au barua support@teketeke.dev';
 
-async function handleUssdFlow(payload, supabaseClient) {
+async function handleUssdFlow(payload, supabaseClient, context = {}) {
   const segments = parseUssdSegments(payload.text);
   const action = segments[0] || '';
   if (!action) {
@@ -365,7 +437,8 @@ async function handleUssdFlow(payload, supabaseClient) {
       notifyOps('ussd_lookup', {
         plate: lookup.sanitized.normalized,
         found: true,
-        msisdn_suffix: payload.phoneNumber ? String(payload.phoneNumber).slice(-4) : null
+        msisdn_suffix: payload.phoneNumber ? String(payload.phoneNumber).slice(-4) : null,
+        request_id: context.requestId || null
       });
       return { type: 'END', message: lines.join('\n') };
     }
@@ -375,7 +448,8 @@ async function handleUssdFlow(payload, supabaseClient) {
     notifyOps('ussd_lookup', {
       plate: lookup.sanitized ? lookup.sanitized.normalized : null,
       found: false,
-      msisdn_suffix: payload.phoneNumber ? String(payload.phoneNumber).slice(-4) : null
+      msisdn_suffix: payload.phoneNumber ? String(payload.phoneNumber).slice(-4) : null,
+      request_id: context.requestId || null
     });
     return { type: 'END', message: 'Hatukupata matatu hiyo. Hakikisha plate ni sahihi.' };
   }
@@ -460,9 +534,10 @@ function createRateLimiter({ windowMs, max, keyGenerator, name = 'rateLimiter' }
         key,
         retry_after: retryAfter,
         ip: req.ip,
-        path: req.originalUrl
+        path: req.originalUrl,
+        request_id: req.requestId || null
       });
-      return res.status(429).json({ error: 'rate_limited' });
+      return res.status(429).json({ error: 'rate_limited', request_id: req.requestId || null });
     }
     next();
   };
@@ -556,7 +631,8 @@ function requireUssdSignature(req, res, next) {
   notifyOps('ussd_signature_invalid', {
     path: req.originalUrl,
     session: req.body && (req.body.sessionId || req.body.session_id),
-    msisdn_suffix: req.body && req.body.phoneNumber ? String(req.body.phoneNumber).slice(-4) : null
+    msisdn_suffix: req.body && req.body.phoneNumber ? String(req.body.phoneNumber).slice(-4) : null,
+    request_id: req.requestId || null
   });
   if (!res.headersSent) {
     sendUssdResponse(res, 'END', 'Huduma haikupatikana. (usumbufu wa uhalalishaji)');
@@ -573,7 +649,7 @@ app.post(
   asUssd(async (req) => {
     const payload = extractUssdPayload(req);
     const supabaseClient = (req.app && req.app.locals && req.app.locals.supabase) || supabase;
-    return handleUssdFlow(payload, supabaseClient);
+    return handleUssdFlow(payload, supabaseClient, { requestId: req.requestId || null });
   })
 );
 
@@ -597,14 +673,15 @@ app.get('/healthz', async (req, res) => {
   } else {
     const dbStart = Date.now();
     try {
-      const { error } = await supabase.from('transactions').select('id', { head: true }).limit(1);
+      const supabaseClient = resolveSupabase(req);
+      const { error } = await supabaseClient.from('transactions').select('id', { head: true }).limit(1);
       if (error) throw error;
       result.checks.supabase = { status: 'ok', latency_ms: Date.now() - dbStart };
     } catch (err) {
       statusCode = 503;
       result.status = 'degraded';
       result.checks.supabase = { status: 'error', latency_ms: Date.now() - dbStart, error: err.message };
-      notifyOps('healthcheck_supabase_error', { message: err.message });
+      notifyOps('healthcheck_supabase_error', { message: err.message, request_id: req.requestId || null });
     }
   }
 
@@ -657,14 +734,19 @@ app.post(
   '/api/matatus',
   requireAdmin,
   asApi(async (req) => {
+    const supabaseClient = resolveSupabase(req);
     const { plate, name, sacco_name } = req.body || {};
-    if (!plate) throw new Error('plate is required');
+    if (!plate) throw createHttpError('plate_required', 400);
+    const safePlate = ensureValidPlate(plate);
     const payload = {
-      plate: String(plate).trim().toUpperCase(),
-      name: name || null,
-      sacco_name: sacco_name || null
+      plate: safePlate,
+      name: name ? String(name).trim() || null : null,
+      sacco_name: sacco_name ? String(sacco_name).trim() || null : null
     };
-    const { data, error } = await supabase.from('matatus').upsert(payload, { onConflict: 'plate' }).select('*')
+    const { data, error } = await supabaseClient
+      .from('matatus')
+      .upsert(payload, { onConflict: 'plate' })
+      .select('*')
       .maybeSingle();
     if (error) throw error;
     return { matatu: data };
@@ -675,12 +757,14 @@ app.post(
   '/api/matatus/:id/till',
   requireAdmin,
   asApi(async (req) => {
+    const supabaseClient = resolveSupabase(req);
     const { id } = req.params;
     const { till_number } = req.body || {};
-    if (!till_number) throw new Error('till_number is required');
-    const { data, error } = await supabase
+    if (!till_number) throw createHttpError('till_required', 400);
+    const safeTill = ensureValidTill(till_number);
+    const { data, error } = await supabaseClient
       .from('matatus')
-      .update({ till_number: String(till_number).trim() })
+      .update({ till_number: safeTill })
       .eq('id', id)
       .select('*')
       .maybeSingle();
@@ -694,11 +778,12 @@ app.post(
   '/api/matatus/:id/ussd',
   requireAdmin,
   asApi(async (req) => {
+    const supabaseClient = resolveSupabase(req);
     const { id } = req.params;
-    const { data: code, error } = await supabase.rpc('assign_ussd_code', { p_matatu_id: id });
+    const { data: code, error } = await supabaseClient.rpc('assign_ussd_code', { p_matatu_id: id });
     if (error) throw error;
     const dial = `*${USSD_ROOT}*${code}#`;
-    const { data: mat, error: e2 } = await supabase
+    const { data: mat, error: e2 } = await supabaseClient
       .from('v_matatu_stats')
       .select('*')
       .eq('matatu_id', id)
@@ -712,8 +797,9 @@ app.post(
   '/api/matatus/:id/ussd/reassign',
   requireAdmin,
   asApi(async (req) => {
+    const supabaseClient = resolveSupabase(req);
     const { id } = req.params;
-    const { data: current, error: currentErr } = await supabase
+    const { data: current, error: currentErr } = await supabaseClient
       .from('matatus')
       .select('ussd_code')
       .eq('id', id)
@@ -724,13 +810,13 @@ app.post(
     const nowIso = new Date().toISOString();
 
     if (current.ussd_code) {
-      await supabase
+      await supabaseClient
         .from('ussd_codes')
         .update({ status: 'free', assigned_to: null, assigned_at: null })
         .eq('code', current.ussd_code);
     }
 
-    let freeQuery = supabase
+    let freeQuery = supabaseClient
       .from('ussd_codes')
       .select('code')
       .eq('status', 'free')
@@ -745,16 +831,16 @@ app.post(
     if (nextErr) throw nextErr;
     if (!next) throw new Error('No free USSD codes available');
 
-    const { error: updateMatatuErr } = await supabase.from('matatus').update({ ussd_code: next.code }).eq('id', id);
+    const { error: updateMatatuErr } = await supabaseClient.from('matatus').update({ ussd_code: next.code }).eq('id', id);
     if (updateMatatuErr) throw updateMatatuErr;
 
-    const { error: updatePoolErr } = await supabase
+    const { error: updatePoolErr } = await supabaseClient
       .from('ussd_codes')
       .update({ status: 'assigned', assigned_to: id, assigned_at: nowIso })
       .eq('code', next.code);
     if (updatePoolErr) throw updatePoolErr;
 
-    const { data: mat, error: viewErr } = await supabase
+    const { data: mat, error: viewErr } = await supabaseClient
       .from('v_matatu_stats')
       .select('*')
       .eq('matatu_id', id)
@@ -762,6 +848,54 @@ app.post(
     if (viewErr) throw viewErr;
 
     return { matatu: mat, dial: `*${USSD_ROOT}*${next.code}#` };
+  })
+);
+
+app.get(
+  '/api/matatus/search',
+  requireAdmin,
+  asApi(async (req) => {
+    const plateQuery = (req.query && req.query.plate) || '';
+    const query = String(plateQuery || '').trim();
+    if (!query) return { items: [], meta: { total: 0, query: '' } };
+
+    const supabaseClient = resolveSupabase(req);
+    const sanitized = sanitizePlateInput(query);
+    const results = [];
+    const seen = new Set();
+
+    if (sanitized) {
+      const { data: exact, error: exactErr } = await supabaseClient
+        .from('v_matatu_stats')
+        .select('*')
+        .filter("replace(upper(plate),' ','')", 'eq', sanitized.normalized)
+        .maybeSingle();
+      if (exactErr) throw exactErr;
+      if (exact) {
+        results.push(exact);
+        if (exact.matatu_id) seen.add(exact.matatu_id);
+      }
+    }
+
+    const pattern = `%${query.replace(/\s+/g, '%')}%`;
+    const remaining = Math.max(0, 20 - results.length);
+    if (remaining > 0) {
+      const { data: fuzzy, error: fuzzyErr } = await supabaseClient
+        .from('v_matatu_stats')
+        .select('*')
+        .ilike('plate', pattern)
+        .order('plate', { ascending: true })
+        .limit(remaining);
+      if (fuzzyErr) throw fuzzyErr;
+      (fuzzy || []).forEach((row) => {
+        if (!row) return;
+        if (row.matatu_id && seen.has(row.matatu_id)) return;
+        results.push(row);
+        if (row.matatu_id) seen.add(row.matatu_id);
+      });
+    }
+
+    return { items: results, meta: { total: results.length, query } };
   })
 );
 
@@ -779,10 +913,15 @@ app.get(
 app.get(
   '/api/matatus',
   requireAdmin,
-  asApi(async () => {
-    const { data, error } = await supabase.from('v_matatu_stats').select('*').order('last_tx_at', { ascending: false });
+  asApi(async (req) => {
+    const supabaseClient = resolveSupabase(req);
+    const { data, error } = await supabaseClient
+      .from('v_matatu_stats')
+      .select('*')
+      .order('last_tx_at', { ascending: false });
     if (error) throw error;
-    return { items: data };
+    const items = data || [];
+    return { items, meta: { total: items.length } };
   })
 );
 
@@ -791,7 +930,8 @@ app.get(
   requireAdmin,
   asApi(async (req) => {
     const { id } = req.params;
-    const { data, error } = await supabase.from('v_matatu_stats').select('*').eq('matatu_id', id).maybeSingle();
+    const supabaseClient = resolveSupabase(req);
+    const { data, error } = await supabaseClient.from('v_matatu_stats').select('*').eq('matatu_id', id).maybeSingle();
     if (error) throw error;
     return { matatu: data };
   })
@@ -801,6 +941,7 @@ app.get(
   '/api/transactions',
   requireAdmin,
   asApi(async (req) => {
+    const supabaseClient = resolveSupabase(req);
     const { matatu_id, plate, status, limit, from, to } = req.query || {};
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
     const normalizedStatus = typeof status === 'string' ? status.trim().toLowerCase() : '';
@@ -814,7 +955,7 @@ app.get(
     if (matatu_id) matatuIdsSet.add(matatu_id);
 
     if (!matatu_id && normalizedPlate) {
-      const { data: matched, error: matchErr } = await supabase
+      const { data: matched, error: matchErr } = await supabaseClient
         .from('matatus')
         .select('id')
         .ilike('plate', `%${normalizedPlate}%`)
@@ -864,15 +1005,19 @@ app.get(
 
     const [dataRes, countRes, todayRes] = await Promise.all([
       applyFilters(
-        supabase.from('transactions').select(selectColumns).order('created_at', { ascending: false }).limit(parsedLimit),
+        supabaseClient
+          .from('transactions')
+          .select(selectColumns)
+          .order('created_at', { ascending: false })
+          .limit(parsedLimit),
         { dateFrom: fromIso, dateTo: toIso }
       ),
       applyFilters(
-        supabase.from('transactions').select('id', { count: 'exact', head: true }),
+        supabaseClient.from('transactions').select('id', { count: 'exact', head: true }),
         { dateFrom: fromIso, dateTo: toIso }
       ),
       applyFilters(
-        supabase.from('transactions').select('id', { count: 'exact', head: true }),
+        supabaseClient.from('transactions').select('id', { count: 'exact', head: true }),
         { dateFrom: todayStartIso, dateTo: todayEndIso }
       )
     ]);
@@ -908,6 +1053,7 @@ app.post(
   callbackLimiter,
   requireCallbackSignature,
   asApi(async (req) => {
+    const supabaseClient = resolveSupabase(req);
     const { matatu_id, amount, msisdn, status, mpesa_receipt, gateway_ref, raw } = req.body || {};
     if (!matatu_id || typeof amount === 'undefined' || !status)
       throw new Error('matatu_id, amount, status are required');
@@ -931,7 +1077,7 @@ app.post(
       gateway_ref: gateway_ref || null,
       raw: raw || null
     };
-    const { data, error } = await supabase.from('transactions').insert(rec).select('*').maybeSingle();
+    const { data, error } = await supabaseClient.from('transactions').insert(rec).select('*').maybeSingle();
     if (error) throw error;
     return { saved: true, tx: data };
   })
@@ -941,11 +1087,12 @@ app.post(
   '/api/sim/tx',
   requireAdmin,
   asApi(async (req) => {
+    const supabaseClient = resolveSupabase(req);
     const { matatu_id, amount = 50, msisdn = '254700000000' } = req.body || {};
     if (!matatu_id) throw new Error('matatu_id is required');
     const amt = Number(amount);
     if (!(amt > 0)) throw new Error('amount must be > 0');
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from('transactions')
       .insert({
         matatu_id,
@@ -966,8 +1113,9 @@ app.delete(
   '/api/matatus/:id',
   requireAdmin,
   asApi(async (req) => {
+    const supabaseClient = resolveSupabase(req);
     const { id } = req.params;
-    const { data: current, error: currentErr } = await supabase
+    const { data: current, error: currentErr } = await supabaseClient
       .from('matatus')
       .select('ussd_code')
       .eq('id', id)
@@ -976,13 +1124,13 @@ app.delete(
     if (!current) return { deleted: false };
 
     if (current.ussd_code) {
-      await supabase
+      await supabaseClient
         .from('ussd_codes')
         .update({ status: 'free', assigned_to: null, assigned_at: null })
         .eq('code', current.ussd_code);
     }
 
-    const { error: deleteErr } = await supabase.from('matatus').delete().eq('id', id);
+    const { error: deleteErr } = await supabaseClient.from('matatus').delete().eq('id', id);
     if (deleteErr) throw deleteErr;
 
     return { deleted: true };
@@ -1013,9 +1161,10 @@ app.use((err, req, res, next) => {
   notifyOps('unhandled_error', {
     path: req.originalUrl,
     method: req.method,
-    message: err && err.message ? err.message : String(err)
+    message: err && err.message ? err.message : String(err),
+    request_id: req.requestId || null
   });
-  res.status(500).json({ error: 'internal_error', message: err.message });
+  res.status(500).json({ error: 'internal_error', message: err.message, request_id: req.requestId || null });
 });
 
 if (require.main === module) {
@@ -1029,3 +1178,4 @@ module.exports.createRateLimiter = createRateLimiter;
 module.exports.verifyCallbackSignature = verifyCallbackSignature;
 module.exports.notifyOps = notifyOps;
 module.exports.APP_VERSION = APP_VERSION;
+

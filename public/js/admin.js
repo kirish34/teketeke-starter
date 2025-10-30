@@ -86,8 +86,16 @@ async function api(path, opts = {}) {
     window.location.href = '/login.html';
     throw new Error('unauthorized');
   }
+  const requestId = res.headers.get('x-request-id');
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || res.statusText);
+  if (!res.ok) {
+    const err = new Error(body.error || res.statusText || 'request_failed');
+    err.requestId = body.request_id || requestId || null;
+    throw err;
+  }
+  if (body && typeof body === 'object' && !Array.isArray(body) && requestId && !body.request_id) {
+    body.request_id = requestId;
+  }
   return body;
 }
 
@@ -131,34 +139,67 @@ async function createMatatu(e){
 }
 
 let _matatus = [];
+let _matatuTotal = 0;
 let _transactions = [];
 let _lastTxSummary = null;
-async function loadMatatus(){
-  const out = await api('/api/matatus');
-  _matatus = out.items || [];
-  refreshMatatuOptions();
-  renderList(_matatus);
+let _listFilterTimer = null;
+async function loadMatatus(options = {}){
+  const plate = options.plate ? String(options.plate).trim() : '';
+  const endpoint = plate ? `/api/matatus/search?plate=${encodeURIComponent(plate)}` : '/api/matatus';
+  const out = await api(endpoint);
+  const items = out.items || [];
+  const total = out.meta && typeof out.meta.total === 'number' ? out.meta.total : items.length;
+  if (!plate) {
+    _matatus = items;
+    _matatuTotal = total;
+    refreshMatatuOptions();
+  }
+  const overall = plate ? (_matatuTotal || total) : total;
+  renderList(items, { totalCount: items.length, overallCount: overall });
+  return items;
 }
 
-function filterList(){
-  const q = $('list_filter').value.trim().toUpperCase();
-  const list = !q ? _matatus : _matatus.filter(x => (x.plate||'').toUpperCase().includes(q));
-  renderList(list);
+function scheduleListFilter(){
+  if (_listFilterTimer) clearTimeout(_listFilterTimer);
+  _listFilterTimer = setTimeout(() => {
+    const q = $('list_filter').value.trim();
+    if (!q) {
+      loadMatatus().catch(() => {});
+    } else {
+      loadMatatus({ plate: q }).catch(() => {});
+    }
+  }, 200);
 }
 
-function renderList(items){
+function renderList(items, context = {}){
   const tbody = document.querySelector('#tbl tbody');
   tbody.innerHTML = '';
   const totalEl = $('list_total');
   if (totalEl) {
-    const overall = Array.isArray(_matatus) ? _matatus.length : 0;
-    if (overall === 0) {
-      totalEl.textContent = 'Total: 0';
-    } else if (items.length === overall) {
+    const totalCount =
+      typeof context.totalCount === 'number' && !Number.isNaN(context.totalCount) ? context.totalCount : items.length;
+    const overall =
+      typeof context.overallCount === 'number' && !Number.isNaN(context.overallCount)
+        ? context.overallCount
+        : totalCount;
+    if (overall <= totalCount) {
       totalEl.textContent = `Total: ${formatNumber(overall)}`;
     } else {
-      totalEl.textContent = `Showing ${formatNumber(items.length)} of ${formatNumber(overall)}`;
+      totalEl.textContent = `Showing ${formatNumber(totalCount)} of ${formatNumber(overall)}`;
     }
+  }
+  if (items.length === 0) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 7;
+    td.className = 'muted';
+    td.textContent = 'No matatus found.';
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    if (totalEl && !context.totalCount && !context.overallCount) {
+      totalEl.textContent = 'Total: 0';
+    }
+    return;
   }
   items.forEach(x=>{
     const tr = document.createElement('tr');
@@ -262,12 +303,20 @@ async function deleteMatatu(matatuId, plate){
 }
 
 async function searchMatatu(){
-  const q = $('edit_search').value.trim().toUpperCase();
-  if(!q){ $('edit_result').innerHTML = '<span class="muted">Enter a plate.</span>'; return; }
-  const out = await api('/api/matatus');
-  const found = (out.items || []).find(x => (x.plate||'').toUpperCase() === q);
-  if(!found){ $('edit_result').innerHTML = 'No match.'; return; }
-  renderEdit(found);
+  const raw = $('edit_search').value.trim();
+  if(!raw){
+    $('edit_result').innerHTML = '<span class="muted">Enter a plate.</span>';
+    return;
+  }
+  const out = await api(`/api/matatus/search?plate=${encodeURIComponent(raw)}`);
+  const items = out.items || [];
+  if (!items.length) {
+    $('edit_result').innerHTML = 'No match.';
+    return;
+  }
+  const target = raw.replace(/\s+/g, '').toUpperCase();
+  const exact = items.find((x) => ((x.plate || '').replace(/\s+/g, '').toUpperCase()) === target);
+  renderEdit(exact || items[0]);
 }
 
 function renderEdit(x){
@@ -460,8 +509,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   $('form-register').addEventListener('submit', createMatatu);
   $('btn-edit-search').addEventListener('click', searchMatatu);
-  $('btn-list-refresh').addEventListener('click', loadMatatus);
-  $('list_filter').addEventListener('input', filterList);
+  $('btn-list-refresh').addEventListener('click', () => {
+    const filterInput = $('list_filter');
+    if (filterInput) filterInput.value = '';
+    loadMatatus().catch(() => {});
+  });
+  $('list_filter').addEventListener('input', scheduleListFilter);
   $('btn-tx-load').addEventListener('click', loadTransactions);
   const txMatatu = $('tx_matatu');
   if (txMatatu) txMatatu.addEventListener('change', () => loadTransactions().catch(() => {}));

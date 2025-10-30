@@ -11,6 +11,7 @@ function createSupabaseMock(responses) {
     select: jest.fn().mockReturnThis(),
     filter: jest.fn().mockReturnThis(),
     ilike: jest.fn().mockReturnThis(),
+    order: jest.fn().mockReturnThis(),
     limit: jest.fn().mockReturnThis(),
     maybeSingle: jest.fn().mockImplementation(() => Promise.resolve(queue.shift() || { data: null, error: null }))
   };

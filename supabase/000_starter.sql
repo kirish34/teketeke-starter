@@ -27,6 +27,8 @@ create table if not exists transactions (
 
 create index if not exists idx_tx_matatu_status on transactions(matatu_id, status);
 create index if not exists idx_tx_matatu_created on transactions(matatu_id, created_at desc);
+create unique index if not exists uniq_tx_gatewayref on transactions(gateway_ref) where gateway_ref is not null;
+create unique index if not exists uniq_tx_receipt on transactions(mpesa_receipt) where mpesa_receipt is not null;
 
 create or replace view v_matatu_stats as
 select

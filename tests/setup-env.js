@@ -6,7 +6,6 @@ process.env.CALLBACK_SECRET = process.env.CALLBACK_SECRET || 'test-secret';
 process.env.ADMIN_USER = process.env.ADMIN_USER || 'admin@example.com';
 process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'super-secret';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'session-secret';
+process.env.OPS_WEBHOOK_URL = '';
 process.env.USSD_GATEWAY_SECRET = process.env.USSD_GATEWAY_SECRET || '';
 process.env.RATE_LIMIT_USSD_MAX = process.env.RATE_LIMIT_USSD_MAX || '90';
-process.env.OPS_WEBHOOK_URL = '';
-

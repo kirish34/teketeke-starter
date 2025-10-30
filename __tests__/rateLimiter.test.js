@@ -13,7 +13,7 @@ describe('createRateLimiter', () => {
       name: 'testLimiter'
     });
 
-    const req = { ip: '127.0.0.1', originalUrl: '/test' };
+    const req = { ip: '127.0.0.1', originalUrl: '/test', requestId: 'test-req' };
     const next = jest.fn();
     const res = {
       statusCode: 200,
@@ -37,6 +37,6 @@ describe('createRateLimiter', () => {
 
     limiter(req, res, next);
     expect(res.statusCode).toBe(429);
-    expect(res.body).toEqual({ error: 'rate_limited' });
+    expect(res.body).toEqual({ error: 'rate_limited', request_id: 'test-req' });
   });
 });

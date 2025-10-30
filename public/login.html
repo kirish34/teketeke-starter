@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -17,55 +17,23 @@
     .err{color:#b91c1c;font-size:.9rem;min-height:20px}
     .muted{color:var(--muted);font-size:.9rem}
   </style>
-  <script>
-    async function me(){
-      try{
-        const r = await fetch('/api/auth/me');
-        if(r.ok) location.href = '/';
-      }catch(_){/* ignore */}
-    }
-    async function onLogin(e){
-      e.preventDefault();
-      const username = document.getElementById('username').value.trim();
-      const password = document.getElementById('password').value;
-      const btn = document.getElementById('btn');
-      const err = document.getElementById('err');
-      err.textContent = '';
-      btn.disabled = true; btn.textContent = 'Signing in…';
-      try{
-        const res = await fetch('/api/auth/login', {
-          method:'POST', headers:{'content-type':'application/json'},
-          body: JSON.stringify({ username, password })
-        });
-        const body = await res.json().catch(()=>({}));
-        if(!res.ok) throw new Error(body.error || 'login_failed');
-        location.href = '/';
-      }catch(ex){
-        err.textContent = ex.message || 'Login failed';
-      }finally{
-        btn.disabled = false; btn.textContent = 'Sign In';
-      }
-      return false;
-    }
-    // redirect if already logged in
-    me();
-  </script>
+  <script src="./js/login.js" defer></script>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
       <h1>Admin Login</h1>
-      <form onsubmit="return onLogin(event)">
+      <form id="login-form" novalidate>
         <div>
-          <label>Username</label>
-          <input id="username" placeholder="Admin username" required />
+          <label for="username">Username</label>
+          <input id="username" name="username" autocomplete="username" placeholder="Admin username" required />
         </div>
         <div>
-          <label>Password</label>
-          <input id="password" type="password" placeholder="Password" required />
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Password" required />
         </div>
         <div class="err" id="err"></div>
-        <button id="btn">Sign In</button>
+        <button id="btn" type="submit">Sign In</button>
       </form>
       <div style="height:8px"></div>
       <div class="muted">Set <code>ADMIN_USER</code>, <code>ADMIN_PASSWORD</code> and <code>SESSION_SECRET</code> in your environment.</div>
@@ -73,4 +41,3 @@
   </div>
 </body>
 </html>
-
