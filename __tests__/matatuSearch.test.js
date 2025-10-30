@@ -6,27 +6,16 @@ function loadServer() {
 }
 
 function createSearchSupabaseMock(exact, fuzzy) {
-  let callCount = 0;
   return {
     from: jest.fn().mockImplementation(() => {
-      callCount += 1;
-      if (callCount === 1) {
-        return {
-          select: jest.fn().mockReturnThis(),
-          filter: jest.fn().mockReturnThis(),
-          ilike: jest.fn().mockReturnThis(),
-          order: jest.fn().mockReturnThis(),
-          limit: jest.fn().mockReturnThis(),
-          maybeSingle: jest.fn().mockResolvedValue(exact)
-        };
-      }
       return {
         select: jest.fn().mockReturnThis(),
         filter: jest.fn().mockReturnThis(),
         ilike: jest.fn().mockReturnThis(),
         order: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockResolvedValue(fuzzy),
-        maybeSingle: jest.fn()
+        eq: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue(fuzzy || { data: [], error: null }),
+        maybeSingle: jest.fn().mockResolvedValue(exact || { data: null, error: null })
       };
     })
   };

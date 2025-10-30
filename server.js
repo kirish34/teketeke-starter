@@ -864,11 +864,12 @@ app.get(
     const results = [];
     const seen = new Set();
 
-    if (sanitized) {
+    if (sanitized && /^[A-Z]{3}\d{3}[A-Z]$/.test(sanitized.normalized)) {
+      const exactPlate = sanitized.raw.replace(/\s+/g, ' ').trim();
       const { data: exact, error: exactErr } = await supabaseClient
         .from('v_matatu_stats')
         .select('*')
-        .filter("replace(upper(plate),' ','')", 'eq', sanitized.normalized)
+        .eq('plate', exactPlate)
         .maybeSingle();
       if (exactErr) throw exactErr;
       if (exact) {
